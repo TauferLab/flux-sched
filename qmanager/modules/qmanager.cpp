@@ -50,6 +50,8 @@ class fluxion_resource_interface_t {
 struct qmanager_ctx_t : public qmanager_cb_ctx_t, public fluxion_resource_interface_t {
     flux_msg_handler_t **hndlr{nullptr};
     flux_msg_handler_t **stats_hndlr{nullptr};
+    std::vector<flux_msg_t *> pending_quiescent_requests; // Track pending requests
+    flux_watcher_t *quiescent_prep{nullptr}; // Watcher to check scheduler state
 };
 
 fluxion_resource_interface_t::~fluxion_resource_interface_t ()
@@ -513,6 +515,66 @@ const struct schedutil_ops ops = {
     .prioritize = &qmanager_safe_cb_t::jobmanager_prioritize_cb,
 };
 
+static inline int respond_to_quiescent(flux_t *h, const flux_msg_t *msg) {
+    const char *payload = NULL;
+    flux_msg_get_string(msg, &payload);
+    int rc = flux_respond(h, msg, payload);
+    flux_log(h, LOG_DEBUG, "responding to quiescent request");
+    return rc;
+}
+
+static void quiescent_request_cb(flux_t *h, flux_msg_handler_t *w,
+                                 const flux_msg_t *msg, void *arg) {
+    std::shared_ptr<qmanager_ctx_t> ctx = *(static_cast<std::shared_ptr<qmanager_ctx_t>*>(
+        flux_aux_get(h, "sched-fluxion-qmanager")));
+    bool busy = false;
+
+    // Check if any queue's scheduler loop is active
+    for (const auto& [qname, queue] : ctx->queues) {
+        if (queue->is_sched_loop_active()) {
+            busy = true;
+            break;
+        }
+    }
+
+    if (!busy) {
+        respond_to_quiescent(h, msg);
+    } else {
+        // Store the request and wait
+        flux_msg_t *copy = flux_msg_copy(msg, true); 
+        if (!copy) {
+            flux_log_error(h, "%s: flux_msg_copy", __FUNCTION__);
+            flux_respond_error(h, msg, errno, "Failed to copy message");
+            return;
+        }
+        ctx->pending_quiescent_requests.push_back(copy);
+    }
+}
+
+static void process_pending_quiescent_requests(qmanager_ctx_t *ctx) {
+    bool busy = false;
+    for (const auto& [qname, queue] : ctx->queues) {
+        if (queue->is_sched_loop_active()) {
+            busy = true;
+            break;
+        }
+    }
+
+    if (!busy && !ctx->pending_quiescent_requests.empty()) {
+        for (auto &msg : ctx->pending_quiescent_requests) {
+            respond_to_quiescent(ctx->h, msg);
+            flux_msg_decref(msg);
+        }
+        ctx->pending_quiescent_requests.clear();
+    }
+}
+
+static void quiescent_prep_cb(flux_reactor_t *r, flux_watcher_t *w,
+                              int revents, void *arg) {
+    qmanager_ctx_t *ctx = static_cast<qmanager_ctx_t *>(arg);
+    process_pending_quiescent_requests(ctx);
+}
+
 static std::shared_ptr<qmanager_ctx_t> qmanager_new (flux_t *h)
 {
     std::shared_ptr<qmanager_ctx_t> ctx = nullptr;
@@ -551,6 +613,14 @@ static std::shared_ptr<qmanager_ctx_t> qmanager_new (flux_t *h)
             ctx = nullptr;
             goto done;
         }
+        // watcher that checks to see if the sched is idle and there are any pending requests for this info
+        if (!(ctx->quiescent_prep = flux_prepare_watcher_create(
+            reactor, quiescent_prep_cb, ctx.get()))) {
+            flux_log_error(h, "%s: flux_prepare_watcher_create", __FUNCTION__);
+            ctx = nullptr;
+            goto done;
+        }
+        flux_watcher_start(ctx->quiescent_prep);
         int schedutil_flags = 0;
 #ifdef SCHEDUTIL_HELLO_PARTIAL_OK
         // flag was added in flux-core 0.70.0
@@ -599,6 +669,7 @@ static const struct flux_msg_handler_spec htab[] = {
     {FLUX_MSGTYPE_REQUEST, "sched.resource-status", status_request_cb, FLUX_ROLE_USER},
     {FLUX_MSGTYPE_REQUEST, "*.feasibility", feasibility_request_cb, FLUX_ROLE_USER},
     {FLUX_MSGTYPE_REQUEST, "*.params", params_request_cb, FLUX_ROLE_USER},
+    {FLUX_MSGTYPE_REQUEST, "sched.quiescent", quiescent_request_cb, FLUX_ROLE_USER},
     FLUX_MSGHANDLER_TABLE_END,
 };
 static const struct flux_msg_handler_spec statstab[] = {
