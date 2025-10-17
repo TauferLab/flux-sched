@@ -325,7 +325,7 @@ void qmanager_cb_t::jobmanager_alloc_cb (flux_t *h, const flux_msg_t *msg, void 
     }
     job->id = id;
     job->userid = userid;
-    job->t_submit = 1000;
+    job->t_submit = t_submit;
     job->priority = calc_priority (priority);
     flux_log(h, LOG_DEBUG, "NEW JOB %lu HAS PRIORITY %d with JOBSPEC %s", id, priority, jobspec_str);
     try {
