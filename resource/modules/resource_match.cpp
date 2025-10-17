@@ -1959,17 +1959,92 @@ done:
     return rc;
 }
 
+// ---- tracing cookie (no extra headers) ----
+struct trace_cookie_t {
+    uint64_t jobid;
+    uint64_t seq;     // per-job decision sequence
+    uint64_t corr;    // correlation id
+};
+static inline trace_cookie_t tc_new (uint64_t jobid) {
+    static uint64_t g_corr = 1;
+    trace_cookie_t t;
+    t.jobid = jobid;
+    t.seq   = 0;
+    t.corr  = g_corr++;
+    return t;
+}
+static inline uint64_t tc_bump (trace_cookie_t &t) { t.seq += 1; return t.seq; }
+
+// keep a tiny cookie map
+static trace_cookie_t &ensure_cookie (std::shared_ptr<resource_ctx_t> &, uint64_t jobid)
+{
+    static std::map<uint64_t, trace_cookie_t> cookies;
+    auto it = cookies.find(jobid);
+    if (it == cookies.end())
+        it = cookies.insert({jobid, tc_new(jobid)}).first;
+    return it->second;
+}
+
+// ---- R summarizer (very lightweight)
+static std::string summarize_R (const std::string &r)
+{
+    unsigned long long commas = 0;
+    for (char c : r) if (c == ',') commas++;
+    return "len=" + std::to_string((unsigned long long)r.size())
+         + ",parts~" + std::to_string(commas + 1);
+}
+
+// ---- logger (no printf formats; pure C++ string)
+static void log_reservation_decision (flux_t *h,
+                                      const char *phase,
+                                      uint64_t jobid,
+                                      uint64_t corr,
+                                      uint64_t seq,
+                                      const char *policy,
+                                      int64_t now,
+                                      int64_t at,
+                                      uint64_t duration,
+                                      uint64_t req_count,
+                                      const char *status,
+                                      const char *R_summary,
+                                      double overhead,
+                                      const char *cause)
+{
+    std::ostringstream os;
+    os << "audit:phase=" << (phase ? phase : "-")
+       << " jobid="      << (unsigned long long)jobid
+       << " corr="       << (unsigned long long)corr
+       << " seq="        << (unsigned long long)seq
+       << " policy="     << (policy ? policy : "-")
+       << " now="        << (long long)now
+       << " at="         << (long long)at
+       << " end="        << (long long)(at + (int64_t)duration)
+       << " req="        << (unsigned long long)req_count
+       << " status="     << (status ? status : "-")
+       << " overhead="   << overhead
+       << " cause="      << (cause ? cause : "-")
+       << " R="          << (R_summary ? R_summary : "-");
+    flux_log(h, LOG_DEBUG, "%s", os.str().c_str());
+}
+
+
 static void update_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
     char *R = NULL;
     int64_t at = 0;
     double overhead = 0.0f;
     int64_t jobid = 0;
-    uint64_t duration = 0;
-    std::string status = "";
+    uint64_t duration = 0; // optional placeholder
+    std::string status_str = "";
     std::stringstream o;
     std::chrono::time_point<std::chrono::system_clock> start;
     std::chrono::duration<double> elapsed;
+
+    // audit vars upfront
+    trace_cookie_t *tk_ptr = nullptr;
+    uint64_t req = 0;
+    uint64_t dur = 0;
+    std::string Rsum;
 
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
     if (flux_request_unpack (msg, NULL, "{s:I s:s}", "jobid", &jobid, "R", &R) < 0) {
@@ -1984,49 +2059,47 @@ static void update_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_
             goto error;
         } else if (rc == 1) {
             errno = EINVAL;
-            flux_log (ctx->h,
-                      LOG_ERR,
-                      "%s: jobid (%jd) with different R exists!",
-                      __FUNCTION__,
-                      static_cast<intmax_t> (jobid));
+            flux_log (ctx->h, LOG_ERR, "%s: jobid (%jd) with different R exists!",
+                      __FUNCTION__, static_cast<intmax_t> (jobid));
             goto error;
         }
         elapsed = std::chrono::system_clock::now () - start;
-        // If a jobid with matching R exists, no need to update
         overhead = elapsed.count ();
-        get_jobstate_str (ctx->jobs[jobid]->state, status);
+        get_jobstate_str (ctx->jobs[jobid]->state, status_str);
         o << ctx->jobs[jobid]->R;
         at = ctx->jobs[jobid]->scheduled_at;
-        flux_log (ctx->h,
-                  LOG_DEBUG,
-                  "%s: jobid (%jd) with matching R exists",
-                  __FUNCTION__,
-                  static_cast<intmax_t> (jobid));
+        flux_log (ctx->h, LOG_DEBUG, "%s: jobid (%jd) with matching R exists",
+                  __FUNCTION__, static_cast<intmax_t> (jobid));
     } else if (run_update (ctx, jobid, R, at, overhead, o) < 0) {
-        flux_log_error (ctx->h,
-                        "%s: update failed (id=%jd)",
-                        __FUNCTION__,
+        flux_log_error (ctx->h, "%s: update failed (id=%jd)", __FUNCTION__,
                         static_cast<intmax_t> (jobid));
         goto error;
     }
 
-    if (status == "")
-        status = get_status_string (at, at);
+    // audit log (req/dur left 0 unless you want to parse jobspec)
+    {
+        trace_cookie_t &tk = ensure_cookie(ctx, (uint64_t)jobid);
+        tk_ptr = &tk;
+        Rsum = summarize_R(o.str());
+        dur = duration ? duration : 0;
+        log_reservation_decision(h, "update",
+                                 (uint64_t)jobid, tk.corr, tc_bump(*tk_ptr),
+                                 "update",
+                                 at, at, dur, req,
+                                 status_str.empty() ? "-" : status_str.c_str(),
+                                 Rsum.c_str(), overhead, "reupdate");
+    }
 
-    if (flux_respond_pack (h,
-                           msg,
+    if (status_str.empty())
+        status_str = get_status_string (at, at);
+
+    if (flux_respond_pack (h, msg,
                            "{s:I s:s s:f s:s s:I}",
-                           "jobid",
-                           jobid,
-                           "status",
-                           status.c_str (),
-                           "overhead",
-                           overhead,
-                           "R",
-                           o.str ().c_str (),
-                           "at",
-                           at)
-        < 0)
+                           "jobid", jobid,
+                           "status", status_str.c_str (),
+                           "overhead", overhead,
+                           "R", o.str ().c_str (),
+                           "at", at) < 0)
         flux_log_error (h, "%s", __FUNCTION__);
 
     return;
@@ -2035,6 +2108,7 @@ error:
     if (flux_respond_error (h, msg, errno, NULL) < 0)
         flux_log_error (h, "%s: flux_respond_error", __FUNCTION__);
 }
+
 
 static int run_remove (std::shared_ptr<resource_ctx_t> &ctx,
                        int64_t jobid,
@@ -2090,29 +2164,29 @@ out:
     return rc;
 }
 
+
 static void match_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
     int64_t at = 0;
     int64_t now = 0;
     int64_t jobid = -1;
     double overhead = 0.0f;
-    std::string status = "";
+    std::string status_str = "";
     const char *cmd = NULL;
     const char *js_str = NULL;
     std::stringstream R;
 
+    // audit vars
+    const char *policy = NULL;
+    uint64_t req = 0;
+    uint64_t dur = 0;
+    std::string Rsum;
+
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
-    if (flux_request_unpack (msg,
-                             NULL,
-                             "{s:s s:I s:s}",
-                             "cmd",
-                             &cmd,
-                             "jobid",
-                             &jobid,
-                             "jobspec",
-                             &js_str)
-        < 0)
+    if (flux_request_unpack (msg, NULL, "{s:s s:I s:s}",
+                             "cmd", &cmd, "jobid", &jobid, "jobspec", &js_str) < 0)
         goto error;
+
     if (is_existent_jobid (ctx, jobid)) {
         errno = EINVAL;
         flux_log_error (h, "%s: existent job (%jd).", __FUNCTION__, (intmax_t)jobid);
@@ -2120,33 +2194,33 @@ static void match_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t
     }
     if (run_match (ctx, jobid, cmd, js_str, &now, &at, &overhead, R, NULL) < 0) {
         if (errno != EBUSY && errno != ENODEV)
-            flux_log_error (ctx->h,
-                            "%s: match failed due to match error (id=%jd)",
-                            __FUNCTION__,
-                            (intmax_t)jobid);
-        // The resources couldn't be allocated *or reserved*
-        // Kicking back to qmanager, remove from tracking
-        if (errno == EBUSY) {
+            flux_log_error (ctx->h, "%s: match failed due to match error (id=%jd)",
+                            __FUNCTION__, static_cast<intmax_t> (jobid));
+        if (errno == EBUSY)
             ctx->jobs.erase (jobid);
-        }
         goto error;
     }
 
-    status = get_status_string (now, at);
-    if (flux_respond_pack (h,
-                           msg,
+    // audit log
+    policy = cmd;
+    status_str = get_status_string(now, at);
+    Rsum = summarize_R(R.str());
+    {
+        trace_cookie_t &tk = ensure_cookie(ctx, (uint64_t)jobid);
+        log_reservation_decision(h, "match",
+                                 (uint64_t)jobid, tk.corr, tc_bump(tk),
+                                 policy, now, at, dur, req,
+                                 status_str.c_str(), Rsum.c_str(), overhead,
+                                 "initial_match");
+    }
+
+    if (flux_respond_pack (h, msg,
                            "{s:I s:s s:f s:s s:I}",
-                           "jobid",
-                           jobid,
-                           "status",
-                           status.c_str (),
-                           "overhead",
-                           overhead,
-                           "R",
-                           R.str ().c_str (),
-                           "at",
-                           at)
-        < 0)
+                           "jobid", jobid,
+                           "status", status_str.c_str (),
+                           "overhead", overhead,
+                           "R", R.str ().c_str (),
+                           "at", at) < 0)
         flux_log_error (h, "%s", __FUNCTION__);
 
     return;
@@ -2155,6 +2229,9 @@ error:
     if (flux_respond_error (h, msg, errno, NULL) < 0)
         flux_log_error (h, "%s: flux_respond_error", __FUNCTION__);
 }
+
+
+
 
 static void match_multi_request_cb (flux_t *h,
                                     flux_msg_handler_t *w,
@@ -2197,7 +2274,7 @@ static void match_multi_request_cb (flux_t *h,
             errno = EINVAL;
             flux_log_error (h,
                             "%s: existent job (%jd).",
-                            __FUNCTION__,
+                            __FUNCTION__, 
                             static_cast<intmax_t> (jobid));
             goto error;
         }
@@ -2214,6 +2291,16 @@ static void match_multi_request_cb (flux_t *h,
             }
             goto error;
         }
+        const char *policy = cmd;
+        std::string status_str = get_status_string (now, at);
+        std::string Rsum = summarize_R(R.str());
+        trace_cookie_t &tk = ensure_cookie(ctx, (uint64_t)jobid);
+        log_reservation_decision(h, "match",
+                                (uint64_t)jobid, tk.corr, tc_bump(tk),
+                                policy, now, at,
+                                /*duration*/ 0, /*req*/ 0,
+                                status_str.c_str(), Rsum.c_str(), overhead,
+                                "initial_match");
 
         status = get_status_string (now, at);
         if (flux_respond_pack (h,
@@ -2296,40 +2383,51 @@ static void partial_cancel_request_cb (flux_t *h,
     bool full_removal = false;
     int int_full_removal = 0;
 
+    // audit
+    std::string Rsum;
+
     if (flux_request_unpack (msg, NULL, "{s:I s:s}", "jobid", &jobid, "R", &R) < 0)
         goto error;
 
     jobid_it = ctx->allocations.find (jobid);
     if (jobid_it == ctx->allocations.end ()) {
         errno = ENOENT;
-        flux_log (h,
-                  LOG_DEBUG,
-                  "%s: job (id=%jd) not found in allocations",
-                  __FUNCTION__,
-                  (intmax_t)jobid);
+        flux_log (h, LOG_DEBUG, "%s: job (id=%jd) not found in allocations",
+                  __FUNCTION__, (intmax_t)jobid);
         goto error;
     }
 
     if (run_remove (ctx, jobid, R, true, full_removal) < 0) {
-        flux_log_error (h,
-                        "%s: remove fails due to match error (id=%jd)",
-                        __FUNCTION__,
-                        (intmax_t)jobid);
+        flux_log_error (h, "%s: remove fails due to match error (id=%jd)",
+                        __FUNCTION__, (intmax_t)jobid);
         goto error;
     }
+
+    Rsum = summarize_R(std::string(R ? R : ""));
+    {
+        trace_cookie_t &tk = ensure_cookie(ctx, (uint64_t)jobid);
+        log_reservation_decision(h, "partial-cancel",
+                                 (uint64_t)jobid, tk.corr, tc_bump(tk),
+                                 "partial-cancel",
+                                 0, 0, 0, 0,
+                                 full_removal ? "cancelled" : "reduced",
+                                 Rsum.c_str(), 0.0, "partial-cancel");
+    }
+
     int_full_removal = full_removal;
     if (flux_respond_pack (h, msg, "{s:i}", "full-removal", int_full_removal) < 0)
         flux_log_error (h, "%s", __FUNCTION__);
 
     if (full_removal)
         ctx->allocations.erase (jobid_it);
-
     return;
 
 error:
     if (flux_respond_error (h, msg, errno, NULL) < 0)
         flux_log_error (h, "%s: flux_respond_error", __FUNCTION__);
 }
+
+
 
 static void info_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
@@ -3146,6 +3244,8 @@ static void set_status_request_cb (flux_t *h,
         errmsg = "Failed to set status of resource vertex";
         goto error;
     }
+    flux_log(h, LOG_DEBUG, "audit:resource-status-change path=%s status=%s (may affect reservations)",
+         resource_path.c_str(), status.c_str());
     ctx->m_resources_down_updated = true;
     if (flux_respond (h, msg, NULL) < 0) {
         flux_log_error (h, "%s: flux_respond", __FUNCTION__);
