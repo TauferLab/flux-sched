@@ -494,11 +494,7 @@ static uint64_t compute_alloc_current(qmanager_ctx_t *ctx)
     size_t total = 0;
     for (const auto &kv : ctx->queues) {
         const auto &q = kv.second;
-        // while(q->get_alloc_current()!=0){
-        // if(q->get_alloc_current()!=0) flux_log(ctx->h, LOG_DEBUG, "ALLOC NOT EMPTY????? alloc %d running %d", q->get_alloc_current(), q->get_running_current());
-        // }
         total += q->get_running_current();
-        // flux_log(ctx->h, LOG_DEBUG, "CURRENT ALLOC: %ld CURRENT RUNNING: %ld", q->get_running_current());
 
     }
     return total;
@@ -508,13 +504,11 @@ static inline int respond_to_quiescent(flux_t *h,
                                        const flux_msg_t *msg,
                                        qmanager_ctx_t *ctx)
 {
-    // // --- NEW: log the queues & priorities before responding ---
     for (const auto &kv : ctx->queues) {
         const std::string &qname = kv.first;
         const auto &q = kv.second;
         q->log_all_jobs_with_priorities(h, qname.c_str());
     }
-    // // ----------------------------------------------------------
 
     size_t alloc_current = compute_alloc_current(ctx);
     flux_log(h, LOG_DEBUG, "ALLOC: %ld", alloc_current);
