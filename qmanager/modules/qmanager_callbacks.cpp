@@ -325,8 +325,9 @@ void qmanager_cb_t::jobmanager_alloc_cb (flux_t *h, const flux_msg_t *msg, void 
     }
     job->id = id;
     job->userid = userid;
-    job->t_submit = t_submit;
+    job->t_submit = 1000;
     job->priority = calc_priority (priority);
+    flux_log(h, LOG_DEBUG, "NEW JOB %lu HAS PRIORITY %d with JOBSPEC %s", id, priority, jobspec_str);
     try {
         jobspec_obj = Flux::Jobspec::Jobspec (jobspec_str);
     } catch (const Flux::Jobspec::parse_error &e) {
@@ -466,7 +467,7 @@ void qmanager_cb_t::jobmanager_prioritize_cb (flux_t *h, const flux_msg_t *msg, 
                             static_cast<intmax_t> (id));
             continue;
         }
-
+        flux_log(h, LOG_DEBUG, "JOB REPRIORITIZED :( %lu, NEW PRIORITY %d", id, priority);
         if (queue->pending_reprioritize (id, calc_priority (priority)) < 0) {
             if (errno == ENOENT) {
                 flux_log_error (h,

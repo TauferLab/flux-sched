@@ -130,7 +130,77 @@ class queue_policy_base_t : public resource_model::queue_adapter_base_t {
      *
      */
     virtual ~queue_policy_base_t () {};
+    size_t get_inflight_jobs() const { return m_alloced.size() + m_running.size(); }
+    size_t get_alloc_current() const { return m_alloced.size(); }
+    size_t get_running_current() const { return m_running.size(); }
+    void log_all_jobs_with_priorities(flux_t *h, const char *qname) const {
+        auto state_str = [](job_state_kind_t s) {
+            switch (s) {
+                case job_state_kind_t::INIT: return "INIT";
+                case job_state_kind_t::PENDING: return "PENDING";
+                case job_state_kind_t::REJECTED: return "REJECTED";
+                case job_state_kind_t::RUNNING: return "RUNNING";
+                case job_state_kind_t::ALLOC_RUNNING: return "ALLOC_RUNNING";
+                case job_state_kind_t::CANCELED: return "CANCELED";
+                case job_state_kind_t::COMPLETE: return "COMPLETE";
+            }
+            return "UNKNOWN";
+        };
 
+        auto log_pending_bucket = [&](const char *bucket,
+                                    const std::map<pending_key, flux_jobid_t> &m) {
+            for (const auto &kv : m) {
+                const auto &key = kv.first;
+                flux_jobid_t id = kv.second;
+
+                unsigned int pri;
+                double tsub;
+                uint64_t pts;
+                std::tie(pri, tsub, pts) = key;
+
+                auto it = m_jobs.find(id);
+                const job_t *job = (it != m_jobs.end()) ? it->second.get() : nullptr;
+
+                flux_log(h, LOG_DEBUG,
+                        "[quiescent][%s][%s] job=%jd pri=%u t_submit=%.6f pending_ts=%lu state=%s",
+                        qname, bucket,
+                        id, pri, tsub, pts,
+                        job ? state_str(job->state) : "UNKNOWN");
+            }
+        };
+
+        auto log_u64_bucket = [&](const char *bucket,
+                                const std::map<uint64_t, flux_jobid_t> &m) {
+            for (const auto &kv : m) {
+                uint64_t seq = kv.first;
+                flux_jobid_t id = kv.second;
+
+                auto it = m_jobs.find(id);
+                const job_t *job = (it != m_jobs.end()) ? it->second.get() : nullptr;
+                unsigned int pri = job ? job->priority : 0;
+                double tsub = job ? job->t_submit : 0.0;
+
+                flux_log(h, LOG_DEBUG,
+                        "[quiescent][%s][%s] job=%jd seq=%lu pri=%u t_submit=%.6f state=%s",
+                        qname, bucket,
+                        (intmax_t)id, seq, pri, tsub,
+                        job ? state_str(job->state) : "UNKNOWN");
+            }
+        };
+
+        // Pending-like sets are ordered by pending_key (priority, t_submit, pending_ts)
+        log_pending_bucket("pending",              m_pending);
+        log_pending_bucket("pending_provisional",  m_pending_provisional);
+        log_pending_bucket("blocked",              m_blocked);
+
+        // Running/alloced/rejected/canceled are ordered by their sequence counters
+        log_u64_bucket("alloced",   m_alloced);
+        log_u64_bucket("running",   m_running);
+        log_u64_bucket("rejected",  m_rejected);
+        log_u64_bucket("canceled",  m_canceled);
+    }
+
+    
     /*! The main schedule loop interface that must be implemented
      *  by derived classes: how a derived class implements this method
      *  must determine its queueing policy. For example, a pedantic FCFS
