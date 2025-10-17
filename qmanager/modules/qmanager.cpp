@@ -52,6 +52,10 @@ struct qmanager_ctx_t : public qmanager_cb_ctx_t, public fluxion_resource_interf
     flux_msg_handler_t **stats_hndlr{nullptr};
     std::vector<flux_msg_t *> pending_quiescent_requests; // Track pending requests
     flux_watcher_t *quiescent_prep{nullptr}; // Watcher to check scheduler state
+    flux_future_t *resource_quiescent_check{nullptr};
+    bool resource_is_idle{false};
+    bool pending_resource_check{false};
+    int quiescent_check_generation{0}; // Track check attempts to avoid stale responses
 };
 
 fluxion_resource_interface_t::~fluxion_resource_interface_t ()
@@ -515,11 +519,50 @@ const struct schedutil_ops ops = {
     .prioritize = &qmanager_safe_cb_t::jobmanager_prioritize_cb,
 };
 
-static inline int respond_to_quiescent(flux_t *h, const flux_msg_t *msg) {
-    const char *payload = NULL;
-    flux_msg_get_string(msg, &payload);
-    int rc = flux_respond(h, msg, payload);
-    flux_log(h, LOG_DEBUG, "responding to quiescent request");
+static uint64_t compute_alloc_current(qmanager_ctx_t *ctx)
+{
+    size_t total = 0;
+    for (const auto &kv : ctx->queues) {
+        const auto &q = kv.second;
+        // while(q->get_alloc_current()!=0){
+        // if(q->get_alloc_current()!=0) flux_log(ctx->h, LOG_DEBUG, "ALLOC NOT EMPTY????? alloc %d running %d", q->get_alloc_current(), q->get_running_current());
+        // }
+        total += q->get_running_current();
+        // flux_log(ctx->h, LOG_DEBUG, "CURRENT ALLOC: %ld CURRENT RUNNING: %ld", q->get_running_current());
+
+    }
+    return total;
+}
+
+static inline int respond_to_quiescent(flux_t *h,
+                                       const flux_msg_t *msg,
+                                       qmanager_ctx_t *ctx)
+{
+    // // --- NEW: log the queues & priorities before responding ---
+    for (const auto &kv : ctx->queues) {
+        const std::string &qname = kv.first;
+        const auto &q = kv.second;
+        q->log_all_jobs_with_priorities(h, qname.c_str());
+    }
+    // // ----------------------------------------------------------
+
+    size_t alloc_current = compute_alloc_current(ctx);
+    flux_log(h, LOG_DEBUG, "ALLOC: %ld", alloc_current);
+
+    json_t *o = json_pack("{s:i s:I}", "status", 0, "alloc_current", (json_int_t)alloc_current);
+    if (!o)
+        return flux_respond(h, msg, "{\"status\":1,\"alloc_current\":0}");
+
+    char *payload = json_dumps(o, JSON_COMPACT);
+    json_decref(o);
+
+    int rc = payload ? flux_respond(h, msg, payload)
+                     : flux_respond(h, msg, "{\"status\":1,\"alloc_current\":0}");
+    if (payload) free(payload);
+
+    flux_log(h, LOG_DEBUG,
+             "responding to quiescent request (status=0, alloc_current=%llu)",
+             (unsigned long long)alloc_current);
     return rc;
 }
 
@@ -538,7 +581,7 @@ static void quiescent_request_cb(flux_t *h, flux_msg_handler_t *w,
     }
 
     if (!busy) {
-        respond_to_quiescent(h, msg);
+        respond_to_quiescent(h, msg, ctx.get());
     } else {
         // Store the request and wait
         flux_msg_t *copy = flux_msg_copy(msg, true); 
@@ -562,7 +605,7 @@ static void process_pending_quiescent_requests(qmanager_ctx_t *ctx) {
 
     if (!busy && !ctx->pending_quiescent_requests.empty()) {
         for (auto &msg : ctx->pending_quiescent_requests) {
-            respond_to_quiescent(ctx->h, msg);
+            respond_to_quiescent(ctx->h, msg, ctx);
             flux_msg_decref(msg);
         }
         ctx->pending_quiescent_requests.clear();
