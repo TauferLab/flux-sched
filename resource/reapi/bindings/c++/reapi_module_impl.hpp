@@ -18,12 +18,46 @@ extern "C" {
 #include <flux/core.h>
 }
 
+#include <chrono>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
+
 #include <cerrno>
 #include "resource/reapi/bindings/c++/reapi_module.hpp"
 
 namespace Flux {
 namespace resource_model {
 namespace detail {
+
+struct match_multi_profile_t {
+    flux_t *h{nullptr};
+    uint64_t start_us{0};
+    unsigned int event_count{0};
+};
+
+static inline uint64_t reapi_profile_now_us_ ()
+{
+    using namespace std::chrono;
+    return duration_cast<microseconds> (
+               steady_clock::now ().time_since_epoch ())
+        .count ();
+}
+
+static inline bool reapi_profile_enabled_ ()
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *value = getenv ("FLUX_QMANAGER_SCHED_PROFILE");
+        enabled = (value && *value && strcmp (value, "0") != 0) ? 1 : 0;
+    }
+    return enabled == 1;
+}
+
+static void match_multi_profile_destroy_ (void *arg)
+{
+    delete static_cast<match_multi_profile_t *> (arg);
+}
 
 int reapi_module_t::match_allocate (void *h,
                                     match_op_t match_op,
@@ -112,6 +146,14 @@ void match_allocate_multi_cont (flux_future_t *f, void *arg)
     const char *rset = nullptr;
     const char *status = nullptr;
     queue_adapter_base_t *adapter = static_cast<queue_adapter_base_t *> (arg);
+    match_multi_profile_t *profile =
+        static_cast<match_multi_profile_t *> (flux_future_aux_get (f, "sched::match_multi_profile"));
+    uint64_t elapsed_us = 0;
+    unsigned int event_count = 0;
+    if (profile) {
+        elapsed_us = reapi_profile_now_us_ () - profile->start_us;
+        event_count = ++profile->event_count;
+    }
 
     if (flux_rpc_get_unpack (f,
                              "{s:I s:s s:f s:s s:I}",
@@ -126,12 +168,29 @@ void match_allocate_multi_cont (flux_future_t *f, void *arg)
                              "at",
                              &at)
         == 0) {
+        if (profile && reapi_profile_enabled_ ()) {
+            flux_log (profile->h,
+                      LOG_DEBUG,
+                      "[match-multi-profile] result=success event=%u elapsed_us=%llu jobid=%jd status=%s",
+                      event_count,
+                      (unsigned long long)elapsed_us,
+                      (intmax_t)jobid,
+                      status ? status : "unknown");
+        }
         if (adapter->handle_match_success (jobid, status, rset, at, ov) < 0) {
             adapter->set_sched_loop_active (false);
             flux_future_destroy (f);
             return;
         }
     } else {
+        if (profile && reapi_profile_enabled_ ()) {
+            flux_log (profile->h,
+                      LOG_DEBUG,
+                      "[match-multi-profile] result=error event=%u elapsed_us=%llu errno=%d",
+                      event_count,
+                      (unsigned long long)elapsed_us,
+                      errno);
+        }
         adapter->handle_match_failure (jobid, errno);
         flux_future_destroy (f);
         return;
@@ -164,6 +223,19 @@ int reapi_module_t::match_allocate_multi (void *h,
                              "jobs",
                              jobs)))
         goto error;
+    if (reapi_profile_enabled_ ()) {
+        auto *profile = new match_multi_profile_t ();
+        profile->h = fh;
+        profile->start_us = reapi_profile_now_us_ ();
+        if (flux_future_aux_set (f,
+                                 "sched::match_multi_profile",
+                                 profile,
+                                 match_multi_profile_destroy_)
+            < 0) {
+            delete profile;
+            goto error;
+        }
+    }
     if (flux_future_then (f, -1.0f, match_allocate_multi_cont, static_cast<void *> (adapter)) < 0)
         goto error;
     return 0;

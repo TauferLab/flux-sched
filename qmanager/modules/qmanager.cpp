@@ -18,6 +18,9 @@ extern "C" {
 }
 
 #include <sstream>
+#include <chrono>
+#include <cstring>
+#include <cstdlib>
 
 #include "qmanager/policies/base/queue_policy_base.hpp"
 #include "qmanager/policies/queue_policy_factory_impl.hpp"
@@ -50,7 +53,11 @@ class fluxion_resource_interface_t {
 struct qmanager_ctx_t : public qmanager_cb_ctx_t, public fluxion_resource_interface_t {
     flux_msg_handler_t **hndlr{nullptr};
     flux_msg_handler_t **stats_hndlr{nullptr};
-    std::vector<flux_msg_t *> pending_quiescent_requests; // Track pending requests
+    struct pending_quiescent_request_t {
+        flux_msg_t *msg{nullptr};
+        uint64_t enqueued_us{0};
+    };
+    std::vector<pending_quiescent_request_t> pending_quiescent_requests;
     flux_watcher_t *quiescent_prep{nullptr}; // Watcher to check scheduler state
     flux_future_t *resource_quiescent_check{nullptr};
     bool resource_is_idle{false};
@@ -500,17 +507,58 @@ static uint64_t compute_alloc_current(qmanager_ctx_t *ctx)
     return total;
 }
 
+static inline uint64_t monotonic_now_us ()
+{
+    using namespace std::chrono;
+    return duration_cast<microseconds> (
+               steady_clock::now ().time_since_epoch ())
+        .count ();
+}
+
+static inline bool quiescent_profile_enabled ()
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *value = getenv ("FLUX_QMANAGER_QUIESCENT_PROFILE");
+        enabled = (value && *value && strcmp (value, "0") != 0) ? 1 : 0;
+    }
+    return enabled == 1;
+}
+
+static inline bool quiescent_dump_jobs_enabled ()
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *value = getenv ("FLUX_QMANAGER_QUIESCENT_DUMP_JOBS");
+        enabled = (!value || strcmp (value, "0") != 0) ? 1 : 0;
+    }
+    return enabled == 1;
+}
+
 static inline int respond_to_quiescent(flux_t *h,
                                        const flux_msg_t *msg,
-                                       qmanager_ctx_t *ctx)
+                                       qmanager_ctx_t *ctx,
+                                       uint64_t queue_wait_us = 0)
 {
+    uint64_t total_start_us = monotonic_now_us ();
+    uint64_t log_start_us = total_start_us;
+    size_t queue_count = 0;
+    size_t tracked_jobs = 0;
+    size_t pending_requests = ctx->pending_quiescent_requests.size ();
+
     for (const auto &kv : ctx->queues) {
         const std::string &qname = kv.first;
         const auto &q = kv.second;
-        q->log_all_jobs_with_priorities(h, qname.c_str());
+        queue_count++;
+        tracked_jobs += q->get_tracked_job_count ();
+        if (quiescent_dump_jobs_enabled ())
+            q->log_all_jobs_with_priorities(h, qname.c_str());
     }
+    uint64_t log_end_us = monotonic_now_us ();
 
+    uint64_t alloc_start_us = log_end_us;
     size_t alloc_current = compute_alloc_current(ctx);
+    uint64_t alloc_end_us = monotonic_now_us ();
     flux_log(h, LOG_DEBUG, "ALLOC: %ld", alloc_current);
 
     json_t *o = json_pack("{s:i s:I}", "status", 0, "alloc_current", (json_int_t)alloc_current);
@@ -527,6 +575,20 @@ static inline int respond_to_quiescent(flux_t *h,
     flux_log(h, LOG_DEBUG,
              "responding to quiescent request (status=0, alloc_current=%llu)",
              (unsigned long long)alloc_current);
+    if (quiescent_profile_enabled ()) {
+        flux_log (h,
+                  LOG_DEBUG,
+                  "[quiescent-profile] queues=%zu tracked_jobs=%zu pending_requests=%zu "
+                  "dump_jobs=%d queue_wait_us=%llu log_us=%llu alloc_us=%llu total_us=%llu",
+                  queue_count,
+                  tracked_jobs,
+                  pending_requests,
+                  quiescent_dump_jobs_enabled () ? 1 : 0,
+                  (unsigned long long)queue_wait_us,
+                  (unsigned long long)(log_end_us - log_start_us),
+                  (unsigned long long)(alloc_end_us - alloc_start_us),
+                  (unsigned long long)(alloc_end_us - total_start_us));
+    }
     return rc;
 }
 
@@ -545,7 +607,7 @@ static void quiescent_request_cb(flux_t *h, flux_msg_handler_t *w,
     }
 
     if (!busy) {
-        respond_to_quiescent(h, msg, ctx.get());
+        respond_to_quiescent(h, msg, ctx.get(), 0);
     } else {
         // Store the request and wait
         flux_msg_t *copy = flux_msg_copy(msg, true); 
@@ -554,7 +616,10 @@ static void quiescent_request_cb(flux_t *h, flux_msg_handler_t *w,
             flux_respond_error(h, msg, errno, "Failed to copy message");
             return;
         }
-        ctx->pending_quiescent_requests.push_back(copy);
+        qmanager_ctx_t::pending_quiescent_request_t pending;
+        pending.msg = copy;
+        pending.enqueued_us = monotonic_now_us ();
+        ctx->pending_quiescent_requests.push_back(pending);
     }
 }
 
@@ -568,9 +633,13 @@ static void process_pending_quiescent_requests(qmanager_ctx_t *ctx) {
     }
 
     if (!busy && !ctx->pending_quiescent_requests.empty()) {
-        for (auto &msg : ctx->pending_quiescent_requests) {
-            respond_to_quiescent(ctx->h, msg, ctx);
-            flux_msg_decref(msg);
+        uint64_t now_us = monotonic_now_us ();
+        for (auto &pending : ctx->pending_quiescent_requests) {
+            uint64_t queue_wait_us = now_us > pending.enqueued_us
+                                         ? now_us - pending.enqueued_us
+                                         : 0;
+            respond_to_quiescent(ctx->h, pending.msg, ctx, queue_wait_us);
+            flux_msg_decref(pending.msg);
         }
         ctx->pending_quiescent_requests.clear();
     }

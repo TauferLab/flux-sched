@@ -1321,6 +1321,24 @@ static int track_schedule_info (std::shared_ptr<resource_ctx_t> &ctx,
     return 0;
 }
 
+static inline uint64_t resource_profile_now_us_ ()
+{
+    using namespace std::chrono;
+    return duration_cast<microseconds> (
+               steady_clock::now ().time_since_epoch ())
+        .count ();
+}
+
+static inline bool resource_profile_enabled_ ()
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *value = getenv ("FLUX_RESOURCE_MATCH_PROFILE");
+        enabled = (value && *value && strcmp (value, "0") != 0) ? 1 : 0;
+    }
+    return enabled == 1;
+}
+
 static int parse_R (std::shared_ptr<resource_ctx_t> &ctx,
                     const char *R,
                     std::string &R_graph_fmt,
@@ -1579,8 +1597,17 @@ int run_match (std::shared_ptr<resource_ctx_t> &ctx,
     std::chrono::duration<double> elapsed;
     std::chrono::duration<int64_t> epoch;
     bool rsv = false;
+    uint64_t run_start_us = 0;
+    uint64_t traverser_us = 0;
+    uint64_t traverser_start_us = 0;
+    uint64_t emit_us = 0;
+    uint64_t emit_start_us = 0;
+    uint64_t track_us = 0;
+    uint64_t track_start_us = 0;
 
     start = std::chrono::system_clock::now ();
+    if (resource_profile_enabled_ ())
+        run_start_us = resource_profile_now_us_ ();
     if (strcmp ("allocate", cmd) != 0 && strcmp ("allocate_orelse_reserve", cmd) != 0
         && strcmp ("allocate_with_satisfiability", cmd) != 0
         && strcmp ("satisfiability", cmd) != 0) {
@@ -1592,16 +1619,45 @@ int run_match (std::shared_ptr<resource_ctx_t> &ctx,
 
     epoch = std::chrono::duration_cast<std::chrono::seconds> (start.time_since_epoch ());
     *at = *now = epoch.count ();
+    traverser_start_us = resource_profile_now_us_ ();
     if ((rc = run (ctx, jobid, cmd, jstr, at, errp)) < 0) {
+        traverser_us = resource_profile_now_us_ () - traverser_start_us;
         elapsed = std::chrono::system_clock::now () - start;
         *overhead = elapsed.count ();
         update_match_perf (*overhead, jobid, false);
+        const std::string traverser_err = ctx->traverser ? ctx->traverser->err_message () : "";
+        if (resource_profile_enabled_ ()) {
+            flux_log (ctx->h,
+                      LOG_DEBUG,
+                      "[resource-match-profile] jobid=%jd cmd=%s outcome=run_error total_us=%llu "
+                      "jobspec_bytes=%zu traverser_us=%llu errno=%d traverser_err=\"%s\"",
+                      (intmax_t)jobid,
+                      cmd,
+                      (unsigned long long)(resource_profile_now_us_ () - run_start_us),
+                      jstr.size (),
+                      (unsigned long long)traverser_us,
+                      errno,
+                      traverser_err.c_str ());
+        }
+        if (!traverser_err.empty ()) {
+            flux_log (ctx->h,
+                      LOG_ERR,
+                      "%s: traverser error for job %jd cmd=%s: %s",
+                      __FUNCTION__,
+                      (intmax_t)jobid,
+                      cmd,
+                      traverser_err.c_str ());
+        }
         goto done;
     }
+    traverser_us = resource_profile_now_us_ () - traverser_start_us;
+    emit_start_us = resource_profile_now_us_ ();
     if ((rc = ctx->writers->emit (o)) < 0) {
+        emit_us = resource_profile_now_us_ () - emit_start_us;
         flux_log_error (ctx->h, "%s: writer can't emit", __FUNCTION__);
         goto done;
     }
+    emit_us = resource_profile_now_us_ () - emit_start_us;
 
     rsv = (*now != *at) ? true : false;
     elapsed = std::chrono::system_clock::now () - start;
@@ -1609,13 +1665,32 @@ int run_match (std::shared_ptr<resource_ctx_t> &ctx,
     update_match_perf (*overhead, jobid, true);
 
     if (cmd != std::string ("satisfiability")) {
+        track_start_us = resource_profile_now_us_ ();
         if ((rc = track_schedule_info (ctx, jobid, rsv, *at, jstr, o, *overhead)) != 0) {
+            track_us = resource_profile_now_us_ () - track_start_us;
             flux_log_error (ctx->h,
                             "%s: can't add job info (id=%jd)",
                             __FUNCTION__,
                             (intmax_t)jobid);
             goto done;
         }
+        track_us = resource_profile_now_us_ () - track_start_us;
+    }
+    if (resource_profile_enabled_ ()) {
+        flux_log (ctx->h,
+                  LOG_DEBUG,
+                  "[resource-match-profile] jobid=%jd cmd=%s outcome=success total_us=%llu "
+                  "jobspec_bytes=%zu traverser_us=%llu emit_us=%llu track_us=%llu reserved=%d at=%jd now=%jd",
+                  (intmax_t)jobid,
+                  cmd,
+                  (unsigned long long)(resource_profile_now_us_ () - run_start_us),
+                  jstr.size (),
+                  (unsigned long long)traverser_us,
+                  (unsigned long long)emit_us,
+                  (unsigned long long)track_us,
+                  rsv ? 1 : 0,
+                  (intmax_t)*at,
+                  (intmax_t)*now);
     }
 
 done:

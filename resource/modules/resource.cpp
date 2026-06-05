@@ -10,7 +10,29 @@
 
 #include "resource_match.hpp"
 
+#include <chrono>
+#include <cstdlib>
+#include <cstring>
+
 MOD_NAME ("sched-fluxion-resource");
+
+static inline uint64_t resource_module_profile_now_us_ ()
+{
+    using namespace std::chrono;
+    return duration_cast<microseconds> (
+               steady_clock::now ().time_since_epoch ())
+        .count ();
+}
+
+static inline bool resource_module_profile_enabled_ ()
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *value = getenv ("FLUX_RESOURCE_MATCH_PROFILE");
+        enabled = (value && *value && strcmp (value, "0") != 0) ? 1 : 0;
+    }
+    return enabled == 1;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Request Handler Prototypes
@@ -426,16 +448,39 @@ static void match_multi_request_cb (flux_t *h,
     const char *cmd = nullptr;
     const char *jobs_str = nullptr;
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
+    uint64_t request_start_us = 0;
+    uint64_t unpack_start_us = 0;
+    uint64_t unpack_us = 0;
+    uint64_t load_start_us = 0;
+    uint64_t json_load_us = 0;
+
+    if (resource_module_profile_enabled_ ())
+        request_start_us = resource_module_profile_now_us_ ();
 
     if (!flux_msg_is_streaming (msg)) {
         errno = EPROTO;
         goto error;
     }
+    unpack_start_us = resource_module_profile_now_us_ ();
     if (flux_request_unpack (msg, NULL, "{s:s s:s}", "cmd", &cmd, "jobs", &jobs_str) < 0)
         goto error;
+    unpack_us = resource_module_profile_now_us_ () - unpack_start_us;
+    load_start_us = resource_module_profile_now_us_ ();
     if (!(jobs = json_loads (jobs_str, 0, &err))) {
         errno = ENOMEM;
         goto error;
+    }
+    json_load_us = resource_module_profile_now_us_ () - load_start_us;
+    if (resource_module_profile_enabled_ ()) {
+        flux_log (h,
+                  LOG_DEBUG,
+                  "[resource-match-multi-profile] cmd=%s jobs_bytes=%zu jobs_count=%zu unpack_us=%llu json_load_us=%llu total_preloop_us=%llu",
+                  cmd ? cmd : "unknown",
+                  jobs_str ? strlen (jobs_str) : 0,
+                  json_array_size (jobs),
+                  (unsigned long long)unpack_us,
+                  (unsigned long long)json_load_us,
+                  (unsigned long long)(resource_module_profile_now_us_ () - request_start_us));
     }
 
     json_array_foreach (jobs, index, value) {

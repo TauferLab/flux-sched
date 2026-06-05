@@ -133,6 +133,15 @@ class queue_policy_base_t : public resource_model::queue_adapter_base_t {
     size_t get_inflight_jobs() const { return m_alloced.size() + m_running.size(); }
     size_t get_alloc_current() const { return m_alloced.size(); }
     size_t get_running_current() const { return m_running.size(); }
+    size_t get_tracked_job_count() const {
+        return m_pending.size()
+               + m_pending_provisional.size()
+               + m_blocked.size()
+               + m_alloced.size()
+               + m_running.size()
+               + m_rejected.size()
+               + m_canceled.size();
+    }
     void log_all_jobs_with_priorities(flux_t *h, const char *qname) const {
         auto state_str = [](job_state_kind_t s) {
             switch (s) {
