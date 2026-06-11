@@ -114,7 +114,6 @@ static void set_default_args (std::shared_ptr<resource_ctx_t> &ctx)
     ct_opts.set_load_format ("rv1exec");
     ct_opts.set_match_subsystems ("containment");
     ct_opts.set_match_policy ("first", e);
-    ct_opts.set_prune_filters ("ALL:core,ALL:node");
     ct_opts.set_match_format ("rv1_nosched");
     ct_opts.set_update_interval (0);
     ct_opts.set_traverser_policy ("simple");

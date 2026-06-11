@@ -25,6 +25,66 @@ using namespace Flux::Jobspec;
 using namespace Flux::resource_model;
 using namespace Flux::resource_model::detail;
 
+namespace {
+
+std::string planner_window_debug (const char *site,
+                                  const std::string &vertex_name,
+                                  planner_t *planner,
+                                  int64_t at,
+                                  uint64_t duration,
+                                  std::optional<int64_t> request = std::nullopt)
+{
+    const int64_t plan_start = planner_base_time (planner);
+    const int64_t plan_duration = planner_duration (planner);
+    const int64_t plan_end = plan_start + plan_duration;
+    const int64_t window_end = at + static_cast<int64_t> (duration);
+
+    std::string msg = std::string (site) + ": planner time window";
+    msg += " vertex=" + vertex_name;
+    msg += " at=" + std::to_string (at);
+    msg += " duration=" + std::to_string (duration);
+    msg += " at_plus_duration=" + std::to_string (window_end);
+    msg += " plan_start=" + std::to_string (plan_start);
+    msg += " plan_end=" + std::to_string (plan_end);
+    if (request)
+        msg += " request=" + std::to_string (*request);
+    msg += "\n";
+    return msg;
+}
+
+std::string planner_multi_window_debug (const char *site,
+                                        const std::string &vertex_name,
+                                        planner_multi_t *planner,
+                                        int64_t at,
+                                        uint64_t duration,
+                                        const std::vector<uint64_t> &requests)
+{
+    const int64_t plan_start = planner_multi_base_time (planner);
+    const int64_t plan_duration = planner_multi_duration (planner);
+    const int64_t plan_end = plan_start + plan_duration;
+    const int64_t window_end = at + static_cast<int64_t> (duration);
+
+    std::string msg = std::string (site) + ": planner_multi time window";
+    msg += " vertex=" + vertex_name;
+    msg += " at=" + std::to_string (at);
+    msg += " duration=" + std::to_string (duration);
+    msg += " at_plus_duration=" + std::to_string (window_end);
+    msg += " plan_start=" + std::to_string (plan_start);
+    msg += " plan_end=" + std::to_string (plan_end);
+    msg += " requests={";
+    for (size_t i = 0; i < requests.size (); ++i) {
+        if (i > 0)
+            msg += ",";
+        const char *type = planner_multi_resource_type_at (planner, i);
+        msg += (type) ? type : "?";
+        msg += "=" + std::to_string (requests[i]);
+    }
+    msg += "}\n";
+    return msg;
+}
+
+}  // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 // DFU Traverser Implementation Private API Definitions
 ////////////////////////////////////////////////////////////////////////////////
@@ -90,6 +150,8 @@ int dfu_impl_t::by_avail (const jobmeta_t &meta,
         return -1;
     } else if (avail == -1) {
         m_err_msg += "by_avail: planner_avail_resources_during returned -1.\n";
+        if (errno == ERANGE)
+            m_err_msg += planner_window_debug ("by_avail", (*m_graph)[u].name, p, at, duration);
         m_err_msg += strerror (errno);
         m_err_msg += ".\n";
         return -1;
@@ -138,6 +200,9 @@ int dfu_impl_t::by_excl (const jobmeta_t &meta,
         njobs = planner_avail_resources_during (p, at, duration);
         if (njobs == -1) {
             m_err_msg += "by_excl: planner_avail_resources_during.\n";
+            if (errno == ERANGE)
+                m_err_msg +=
+                    planner_window_debug ("by_excl", (*m_graph)[u].name, p, at, duration, 1);
             m_err_msg += strerror (errno);
             m_err_msg += ".\n";
             return -1;
@@ -177,15 +242,16 @@ int dfu_impl_t::by_subplan (const jobmeta_t &meta,
     count_relevant_types (p, resource.user_data, aggs);
     len = aggs.size ();
     if ((rc = planner_multi_avail_during (p, at, d, aggs.data (), len)) == -1) {
-        // Don't log ERANGE or EBUSY - these are expected conditions:
-        // ERANGE: request exceeds capacity (unsatisfiable)
-        // EBUSY: resources temporarily unavailable
-        if (errno != ERANGE && errno != EBUSY) {
+        if (errno == ERANGE) {
+            m_err_msg += "by_subplan: planner_multi_avail_during returned -1.\n";
+            m_err_msg += planner_multi_window_debug ("by_subplan", (*m_graph)[u].name, p, at, d, aggs);
+            m_err_msg += strerror (errno);
+            m_err_msg += ".\n";
+        } else if (errno != EBUSY) {
             m_err_msg += "by_subplan: planner_multi_avail_during returned -1.\n";
             m_err_msg += strerror (errno);
             m_err_msg += ".\n";
         }
-        // errno already set by planner_multi_avail_during (ERANGE, EBUSY, etc)
         return -1;
     }
 
@@ -620,6 +686,8 @@ int dfu_impl_t::aux_upv (const jobmeta_t &meta,
         goto done;
     } else if (avail == -1) {
         m_err_msg += "aux_upv: planner_avail_resources_during returned -1. ";
+        if (errno == ERANGE)
+            m_err_msg += planner_window_debug ("aux_upv", (*m_graph)[u].name, p, at, duration);
         m_err_msg += strerror (errno);
         m_err_msg += ".\n";
         goto done;
@@ -787,6 +855,8 @@ int dfu_impl_t::dom_dfv (const jobmeta_t &meta,
         goto done;
     } else if (avail == -1) {
         m_err_msg += "dom_dfv: planner_avail_resources_during returned -1.\n";
+        if (errno == ERANGE)
+            m_err_msg += planner_window_debug ("dom_dfv", (*m_graph)[u].name, p, at, duration);
         m_err_msg += strerror (errno);
         m_err_msg += ".\n";
         // errno already set by planner
@@ -1137,6 +1207,11 @@ const std::shared_ptr<const dfu_match_cb_t> dfu_impl_t::get_match_cb () const
 const std::string &dfu_impl_t::err_message () const
 {
     return m_err_msg;
+}
+
+void dfu_impl_t::append_err_message (const std::string &msg)
+{
+    m_err_msg += msg;
 }
 
 const unsigned int dfu_impl_t::get_preorder_count () const

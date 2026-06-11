@@ -26,6 +26,52 @@ using namespace Flux::Jobspec;
 // Global perf struct from schema
 extern struct match_perf_t perf;
 
+namespace {
+
+std::string planner_window_debug (const char *site,
+                                  const std::string &vertex_name,
+                                  planner_t *planner,
+                                  int64_t at,
+                                  uint64_t duration)
+{
+    const int64_t plan_start = planner_base_time (planner);
+    const int64_t plan_duration = planner_duration (planner);
+    const int64_t plan_end = plan_start + plan_duration;
+    const int64_t window_end = at + static_cast<int64_t> (duration);
+
+    std::string msg = std::string (site) + ": planner time window";
+    msg += " vertex=" + vertex_name;
+    msg += " at=" + std::to_string (at);
+    msg += " duration=" + std::to_string (duration);
+    msg += " at_plus_duration=" + std::to_string (window_end);
+    msg += " plan_start=" + std::to_string (plan_start);
+    msg += " plan_end=" + std::to_string (plan_end);
+    msg += "\n";
+    return msg;
+}
+
+std::string planner_multi_window_debug (const char *site,
+                                        planner_multi_t *planner,
+                                        int64_t at,
+                                        uint64_t duration)
+{
+    const int64_t plan_start = planner_multi_base_time (planner);
+    const int64_t plan_duration = planner_multi_duration (planner);
+    const int64_t plan_end = plan_start + plan_duration;
+    const int64_t window_end = at + static_cast<int64_t> (duration);
+
+    std::string msg = std::string (site) + ": planner_multi time window";
+    msg += " at=" + std::to_string (at);
+    msg += " duration=" + std::to_string (duration);
+    msg += " at_plus_duration=" + std::to_string (window_end);
+    msg += " plan_start=" + std::to_string (plan_start);
+    msg += " plan_end=" + std::to_string (plan_end);
+    msg += "\n";
+    return msg;
+}
+
+}  // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 // DFU Traverser Private API Definitions
 ////////////////////////////////////////////////////////////////////////////////
@@ -45,6 +91,9 @@ int dfu_traverser_t::is_satisfiable (Jobspec::Jobspec &jobspec,
     meta.at = planner_multi_base_time (p) + planner_multi_duration (p) - meta.duration - 1;
     traverser->count_relevant_types (p, dfv, agg);
     if ((rc = traverser->select (jobspec, root, meta, x)) < 0) {
+        if (errno == ERANGE)
+            traverser->append_err_message (
+                planner_multi_window_debug ("is_satisfiable", p, meta.at, meta.duration));
         // Translate resource unavailability to unsatisfiable
         // EBUSY: not available even at far future
         // ERANGE: exceeds total capacity
@@ -107,13 +156,22 @@ int dfu_traverser_t::request_feasible (detail::jobmeta_t const &meta,
         // if it matches the constraints
         if ((!meta.constraint || meta.constraint->match (node))
             // if it's up and not drained
-            && (checking_satisfiability || node.status == resource_pool_t::status_t::UP)
-            // if it's available
-            && planner_avail_resources_during (node.schedule.plans, target_time, meta.duration)
-                   == 1) {
-            ++feasible_nodes;
-            if (feasible_nodes >= target_nodes) {
-                break;
+            && (checking_satisfiability || node.status == resource_pool_t::status_t::UP)) {
+            const int64_t avail =
+                planner_avail_resources_during (node.schedule.plans, target_time, meta.duration);
+            if (avail == -1 && errno == ERANGE && traverser->err_message ().empty ()) {
+                traverser->append_err_message (
+                    planner_window_debug ("request_feasible",
+                                          node.name,
+                                          node.schedule.plans,
+                                          target_time,
+                                          meta.duration));
+            }
+            if (avail == 1) {
+                ++feasible_nodes;
+                if (feasible_nodes >= target_nodes) {
+                    break;
+                }
             }
         }
     }
@@ -171,6 +229,9 @@ int dfu_traverser_t::schedule (Jobspec::Jobspec &jobspec,
             meta.at = planner_multi_base_time (p) + planner_multi_duration (p) - meta.duration - 1;
             traverser->count_relevant_types (p, dfv, agg);
             if (traverser->select (jobspec, root, meta, x) < 0) {
+                if (errno == ERANGE)
+                    traverser->append_err_message (
+                        planner_multi_window_debug ("schedule_satisfiability", p, meta.at, meta.duration));
                 // Translate resource unavailability to unsatisfiable
                 // EBUSY: not available even at far future
                 // ERANGE: exceeds total capacity
@@ -211,6 +272,9 @@ int dfu_traverser_t::schedule (Jobspec::Jobspec &jobspec,
                 meta.alloc_type = jobmeta_t::alloc_type_t::AT_SATISFIABILITY;
                 meta.at = planner_multi_base_time (p) + planner_multi_duration (p) - duration - 1;
                 if (traverser->select (jobspec, root, meta, x) < 0) {
+                    if (errno == ERANGE)
+                        traverser->append_err_message (planner_multi_window_debug (
+                            "schedule_reservation_fallback", p, meta.at, duration));
                     // Translate resource unavailability to unsatisfiable
                     // EBUSY: not available even at far future
                     // ERANGE: exceeds total capacity

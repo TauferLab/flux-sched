@@ -1489,6 +1489,14 @@ static int run (std::shared_ptr<resource_ctx_t> &ctx,
             rc = tr.run (j, ctx->writers, match_op_t::MATCH_SATISFIABILITY, jobid, at);
         else
             errno = EINVAL;
+        if (rc < 0 && !tr.err_message ().empty ()) {
+            flux_log (ctx->h,
+                      LOG_ERR,
+                      "%s: dfu_traverser_t::run (id=%jd): %s",
+                      __FUNCTION__,
+                      static_cast<intmax_t> (jobid),
+                      tr.err_message ().c_str ());
+        }
     } catch (const Flux::Jobspec::parse_error &e) {
         errno = EINVAL;
         if (errp && e.what ()) {

@@ -127,6 +127,7 @@ class dfu_impl_t {
     void set_graph_db (std::shared_ptr<resource_graph_db_t> db);
     void set_match_cb (std::shared_ptr<dfu_match_cb_t> m);
     void clear_err_message ();
+    void append_err_message (const std::string &msg);
     void reset_color ();
     int reset_exclusive_resource_types (const std::set<resource_type_t> &x_types);
 

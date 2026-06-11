@@ -477,7 +477,7 @@ extern "C" int planner_avail_during (planner_t *ctx,
         return -1;
     }
     if (static_cast<int64_t> (request) > ctx->plan->get_total_resources ()) {
-        errno = ERANGE;
+        errno = EBUSY;
         return -1;
     }
     ok = avail_during (ctx, start_time, duration, (int64_t)request);
