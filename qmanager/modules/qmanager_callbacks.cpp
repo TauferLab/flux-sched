@@ -466,7 +466,6 @@ void qmanager_cb_t::jobmanager_prioritize_cb (flux_t *h, const flux_msg_t *msg, 
                             static_cast<intmax_t> (id));
             continue;
         }
-
         if (queue->pending_reprioritize (id, calc_priority (priority)) < 0) {
             if (errno == ENOENT) {
                 flux_log_error (h,
