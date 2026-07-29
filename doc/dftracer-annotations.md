@@ -37,19 +37,22 @@ control:
 | level 0 | 62 s | 1.00x | — |
 | level 2, `DFTRACER_DISABLE_IO=1` | 64 s | **1.03x** | 1,536 |
 | level 2 | 128 s | 2.06x | 1,536 |
-| level 5, `DFTRACER_DISABLE_IO=1` | 155 s | 2.50x | 2,570,816 |
-| level 5 | 351 s | 5.66x | 2,605,883 |
+| level 5, `DFTRACER_DISABLE_IO=1` | 155 s | 2.50x | 2,570,814 |
+| level 5 | 351 s | 5.66x | 2,570,814 + 8 `POSIX` |
 
 Two things fall out of that.
 
 **Set `DFTRACER_DISABLE_IO=1` unless you actually want I/O events.** Initializing
-dftracer at all installs its gotcha POSIX/stdio interception, and that — not the
-annotations — is most of the cost: it accounts for 64 of level 2's 66 seconds of
-overhead, and 196 of level 5's 289. Disabling it changes the annotation event
-count by ~1% (the difference is dftracer's own `POSIX/*` events), so with it set,
+dftracer installs gotcha wrappers around the POSIX and stdio calls, and that --
+not the annotations -- is most of the cost: 64 of level 2's 66 seconds of
+overhead, and 196 of level 5's 289. It buys nothing here. The two level 5 traces
+are identical at 2,570,814 annotation events; the whole difference in content is
+8 `POSIX/execv` events, for 196 seconds. dftracer only records I/O under
+DFTRACER_DATA_DIR, so with that pointed at the trace directory every syscall in
+the broker pays for a wrapper that then declines to record anything. With it set,
 level 2 is effectively free.
 
-**Level 5 is expensive even with I/O interception off**, because it is 2.6M
+**Level 5 is expensive even with I/O interception off**, because it is 2.57M
 events, 74% of them from the string interner's `get_both`. That multiplier is
 worse under emulation than it would be in a normal run: flux-fiction drives the
 broker under `libfaketime` with `FAKETIME_NO_CACHE=1`, so every clock read a
