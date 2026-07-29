@@ -19,6 +19,7 @@ extern "C" {
 #include <string>
 #include <yaml-cpp/yaml.h>
 #include "jobspec.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 using namespace std;
 using namespace Flux::Jobspec;
@@ -39,6 +40,9 @@ void parse_yaml_stream_docs (std::istream &js_stream)
 
 int main (int argc, char *argv[])
 {
+    FLUX_DFT_PROCESS_INIT ();
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     try {
         if (argc == 1) {
             parse_yaml_stream_docs (cin);

@@ -16,6 +16,7 @@ extern "C" {
 #include <array>
 #include <boost/algorithm/string.hpp>
 #include "resource/policies/dfu_match_policy_factory.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 namespace Flux {
 namespace resource_model {
@@ -46,6 +47,8 @@ bool parse_custom_match_policy (const std::string long_string,
                                 std::map<std::string, bool> &split,
                                 std::string &error_str)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     std::vector<std::string> options;
     boost::split (options, long_string, boost::is_any_of (" "));
     /* After splitting based on term, validate the terms. If invalid,
@@ -135,6 +138,8 @@ bool parse_bool_match_options (const std::string match_option, std::map<std::str
 
 std::shared_ptr<dfu_match_cb_t> create_match_cb (const std::string &policy_requested)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     std::map<std::string, bool> policy;
     std::string error_str;
     if (policies.contains (policy_requested)) {

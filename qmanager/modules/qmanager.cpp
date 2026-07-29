@@ -24,6 +24,7 @@ extern "C" {
 #include "qmanager/modules/qmanager_opts.hpp"
 #include "src/common/c++wrappers/eh_wrapper.hpp"
 #include "qmanager/modules/qmanager_callbacks.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 using namespace Flux;
 using namespace Flux::queue_manager;
@@ -101,6 +102,8 @@ static int process_args (std::shared_ptr<qmanager_ctx_t> &ctx, int argc, char **
 
 static int subtable_dumps (json_t *o, std::string &value)
 {
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "mem");
     std::stringstream ss;
     const char *k = nullptr;
     json_t *v = nullptr;
@@ -229,6 +232,8 @@ static void set_default (std::shared_ptr<qmanager_ctx_t> &ctx)
 
 static void update_on_resource_response (flux_future_t *f, void *arg)
 {
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
     int rc = -1;
     qmanager_ctx_t *ctx = static_cast<qmanager_ctx_t *> (arg);
 
@@ -298,6 +303,8 @@ out:
 
 static void status_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
     const char *payload;
     flux_future_t *f = NULL;
 
@@ -324,6 +331,8 @@ out:
 
 static void params_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
     int saved_errno;
     json_error_t jerr;
     void *d{nullptr};
@@ -503,6 +512,8 @@ const struct schedutil_ops ops = {
 
 static std::shared_ptr<qmanager_ctx_t> qmanager_new (flux_t *h)
 {
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
     std::shared_ptr<qmanager_ctx_t> ctx = nullptr;
     try {
         flux_reactor_t *reactor{nullptr};
@@ -606,6 +617,8 @@ static const struct flux_msg_handler_spec statstab[] = {
 
 int mod_start (flux_t *h, int argc, char **argv)
 {
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
     int rc = -1;
     std::shared_ptr<qmanager_ctx_t> ctx = nullptr;
     if (!(ctx = qmanager_new (h))) {

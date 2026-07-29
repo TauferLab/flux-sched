@@ -16,6 +16,7 @@ extern "C" {
 
 #include "resource/store/resource_graph_store.hpp"
 #include "resource/readers/resource_reader_base.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 using namespace Flux;
 using namespace Flux::resource_model;
@@ -55,6 +56,8 @@ void resource_graph_metadata_t::initialize_node_stats (resource_graph_t const &g
 
 static void rebuild_by_outedges (resource_graph_t &g, resource_graph_metadata_t &meta)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     // Boost adjacency_list<vecS,vecS> edge descriptors hold raw pointers
     // (m_eproperty) into the stored-edge array, which are NOT stable across
     // graph copies.  Rebuild by_outedges from the graph we actually own so

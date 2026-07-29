@@ -34,6 +34,8 @@ extern "C" {
 #include "resource/policies/dfu_match_policy_factory.hpp"
 #include "resource/reapi/bindings/c++/reapi_cli.hpp"
 #include "resource/reapi/bindings/c++/reapi_cli_impl.hpp"
+#include "src/common/dftracer_annotation.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 namespace fs = std::filesystem;
 using namespace Flux::resource_model;
@@ -340,6 +342,8 @@ static void flatten (resource_graph_t &fg,
                      std::map<edg_t, std::string> &esubsystems,
                      std::map<vtx_t, std::string> &properties)
 {
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "cpu");
     f_vtx_iterator_t vi, v_end;
     f_edg_iterator_t ei, e_end;
 
@@ -383,6 +387,8 @@ static void flatten (resource_graph_t &fg,
 
 static void write_to_graphml (resource_graph_t &fg, std::fstream &o)
 {
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "cpu");
     boost::dynamic_properties dp;
     std::map<edg_t, std::string> esubsystems;
     std::map<vtx_t, std::string> subsystems, properties, paths;
@@ -412,6 +418,8 @@ static void write_to_graphml (resource_graph_t &fg, std::fstream &o)
 
 static void write_to_graph (std::shared_ptr<detail::resource_query_t> &ctx)
 {
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "cpu");
     std::fstream o;
     std::string fn, mn;
     mn = ctx->matcher->matcher_name ();
@@ -442,6 +450,8 @@ static void control_loop (std::shared_ptr<detail::resource_query_t> ctx,
                           json_t *params,
                           std::ostream &out)
 {
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "mem");
     cmd_func_f *cmd = NULL;
     while (1) {
         char *line = json_object_get (params, "disable_prompt") ? readline ("")
@@ -470,6 +480,8 @@ static void control_loop (std::shared_ptr<detail::resource_query_t> ctx,
 
 static void process_args (json_t *options, int argc, char *argv[])
 {
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "cpu");
     int rc = 0;
     int ch = 0;
     std::string token;
@@ -629,6 +641,8 @@ static void fini_resource_query (std::shared_ptr<detail::resource_query_t> &ctx)
 
 static void print_elapse_time (std::shared_ptr<detail::resource_query_t> &ctx, double elapse)
 {
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "cpu");
     resource_graph_t &g = ctx->db->resource_graph;
     std::cout << "INFO: Graph Load Time: " << elapse << std::endl;
     std::cout << "INFO: Vertex Count: " << num_vertices (g) << std::endl;
@@ -648,6 +662,9 @@ static void print_elapse_time (std::shared_ptr<detail::resource_query_t> &ctx, d
 
 int main (int argc, char *argv[])
 {
+    FLUX_DFT_PROCESS_INIT ();
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "cpu");
     json_t *json_options = json_object ();
     std::string rgraph;
     std::shared_ptr<detail::resource_query_t> ctx = nullptr;

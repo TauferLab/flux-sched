@@ -9,6 +9,7 @@
 \*****************************************************************************/
 
 #include "resource_match.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 MOD_NAME ("sched-fluxion-feasibility");
 
@@ -150,6 +151,8 @@ static int process_config_file (std::shared_ptr<resource_ctx_t> &ctx)
 
 static std::shared_ptr<resource_ctx_t> init_module (flux_t *h, int argc, char **argv)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     std::shared_ptr<resource_ctx_t> ctx = nullptr;
     flux_future_t *f = nullptr;
     uint32_t rank = 1;
@@ -202,6 +205,8 @@ static void feasibility_request_cb (flux_t *h,
                                     const flux_msg_t *msg,
                                     void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     int64_t at = 0;
     int64_t now = 0;
     double overhead = 0.0f;

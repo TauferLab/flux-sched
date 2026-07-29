@@ -21,6 +21,7 @@ extern "C" {
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include "src/common/dftracer_annotation.hpp"
 
 using namespace Flux::Jobspec;
 using namespace std::string_view_literals;
@@ -47,6 +48,8 @@ parse_error::parse_error (const YAML::Node &node, const char *msg)
 namespace {
 void parse_yaml_count (Resource &res, const YAML::Node &cnode)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     /* count can have an unsigned integer value */
     if (cnode.IsScalar ()) {
         res.count.min = cnode.as<unsigned> ();

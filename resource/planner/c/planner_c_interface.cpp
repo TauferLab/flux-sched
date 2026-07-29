@@ -14,6 +14,7 @@
 #include <string>
 
 #include "resource/planner/c++/planner.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 ////////////////////////////////////////////////////////////////////////////////
 // Scheduled Point and Resource Update APIs
@@ -54,6 +55,8 @@ static void copy_req (request_t &dest,
 
 static scheduled_point_t *get_or_new_point (planner_t *ctx, int64_t at)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     scheduled_point_t *point = nullptr;
     try {
         if (!(point = ctx->plan->sp_tree_search (at))) {
@@ -83,6 +86,8 @@ static void fetch_overlap_points (planner_t *ctx,
                                   uint64_t duration,
                                   std::list<scheduled_point_t *> &list)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     scheduled_point_t *point = ctx->plan->sp_tree_get_state (at);
     while (point) {
         if (point->at >= static_cast<int64_t> (at + duration))
@@ -145,6 +150,8 @@ static bool span_ok (planner_t *ctx,
                      uint64_t duration,
                      int64_t request)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     bool ok = true;
     scheduled_point_t *next_point = nullptr;
     for (next_point = start_point; next_point != nullptr;
@@ -164,6 +171,8 @@ static bool span_ok (planner_t *ctx,
 
 static int64_t avail_at (planner_t *ctx, int64_t on_or_after, uint64_t duration, int64_t request)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     int64_t at = -1;
     scheduled_point_t *start_point = nullptr;
     while ((start_point = ctx->plan->mt_tree_get_mintime (request))) {
@@ -186,6 +195,8 @@ static int64_t avail_at (planner_t *ctx, int64_t on_or_after, uint64_t duration,
 
 static bool avail_during (planner_t *ctx, int64_t at, uint64_t duration, const int64_t request)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     bool ok = true;
     if (static_cast<int64_t> (at + duration) > ctx->plan->get_plan_end ()) {
         errno = ERANGE;
@@ -209,6 +220,8 @@ static bool avail_during (planner_t *ctx, int64_t at, uint64_t duration, const i
 
 static scheduled_point_t *avail_resources_during (planner_t *ctx, int64_t at, uint64_t duration)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     if (static_cast<int64_t> (at + duration) > ctx->plan->get_plan_end ()) {
         errno = ERANGE;
         return nullptr;
@@ -251,6 +264,8 @@ static inline bool not_feasible (planner_t *ctx,
 
 static int span_input_check (planner_t *ctx, int64_t start_time, uint64_t duration, int64_t request)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     int rc = -1;
     if (!ctx || not_feasible (ctx, start_time, duration, request)) {
         errno = EINVAL;
@@ -269,6 +284,8 @@ static std::shared_ptr<span_t> span_new (planner_t *ctx,
                                          uint64_t duration,
                                          uint64_t request)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     std::shared_ptr<span_t> span = nullptr;
     try {
         if (span_input_check (ctx, start_time, duration, (int64_t)request) == -1)

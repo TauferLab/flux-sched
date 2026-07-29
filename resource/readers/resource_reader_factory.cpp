@@ -21,6 +21,7 @@ extern "C" {
 #include "resource/readers/resource_reader_jgf.hpp"
 #include "resource/readers/resource_reader_jgf_shorthand.hpp"
 #include "resource/readers/resource_reader_rv1exec.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 namespace Flux {
 namespace resource_model {
@@ -44,6 +45,8 @@ bool known_resource_reader (const std::string &name)
 
 std::shared_ptr<resource_reader_base_t> create_resource_reader (const std::string &name)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     std::shared_ptr<resource_reader_base_t> reader = nullptr;
     try {
         // std::make_shared has no nothrow allocator support
@@ -69,6 +72,8 @@ std::shared_ptr<resource_reader_base_t> create_resource_reader (const std::strin
 
 std::string reader_name_from_writer (const char *writer_uri, flux_error_t *errp)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     // RFC 40: writer absent, or "fluxion" with no path, defaults to "jgf".
     if (writer_uri == nullptr)
         return "jgf";

@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include "src/common/dftracer_annotation.hpp"
 
 namespace intern {
 namespace detail {
@@ -63,6 +64,8 @@ dense_inner_storage &get_dense_inner_storage (size_t unique_id)
 
 void dense_storage_finalize (dense_inner_storage &storage)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     auto ul = std::unique_lock (*storage.mtx);
     storage.finalized = true;
 }
@@ -73,11 +76,15 @@ void dense_storage_unfinalize (dense_inner_storage &storage)
 }
 void dense_storage_open (dense_inner_storage &storage)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     auto ul = std::unique_lock (*storage.mtx);
     storage.open_map[std::this_thread::get_id ()] = true;
 }
 void dense_storage_close (dense_inner_storage &storage)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     auto ul = std::unique_lock (*storage.mtx);
     storage.open_map[std::this_thread::get_id ()] = false;
 }
@@ -125,6 +132,8 @@ rc_str_t get_rc (sparse_inner_storage *storage,
                  rc_free_fn fn,
                  bool add_if_missing)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     {  // shared lock scope
         auto sl = std::shared_lock (*storage->mtx);
         auto it = storage->strings.find (s);
@@ -170,6 +179,8 @@ static bool check_valid (size_t val, char bytes_supported)
 
 view_and_id get_both (dense_inner_storage &storage, const std::string_view s, char bytes_supported)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     {  // shared lock scope
         auto sl = std::shared_lock (*storage.mtx);
         auto it = storage.ids_by_string.find (s);

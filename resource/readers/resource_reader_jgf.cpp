@@ -25,6 +25,7 @@ extern "C" {
 #include "resource/readers/resource_reader_jgf.hpp"
 #include "resource/store/resource_graph_store.hpp"
 #include "resource/planner/c/planner.h"
+#include "src/common/dftracer_annotation.hpp"
 
 using namespace Flux;
 using namespace Flux::resource_model;
@@ -129,6 +130,8 @@ bool operator!= (const resource_pool_t &r, const fetch_helper_t &f)
 
 std::string diff (const resource_pool_t &r, const fetch_helper_t &f)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     std::stringstream sstream;
     if (r.type.get () != f.type)
         sstream << "type=(" << r.type << ", " << f.type << ")";

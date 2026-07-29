@@ -34,6 +34,7 @@ extern "C" {
 #include "resource_match_opts.hpp"
 #include "resource/schema/perf_data.hpp"
 #include <jansson.hpp>
+#include "src/common/dftracer_annotation.hpp"
 
 using namespace Flux::resource_model;
 using namespace Flux::opts_manager;
@@ -206,6 +207,8 @@ done:
 
 static void update_resource (flux_future_t *f, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     int rc = -1;
 
     char *acquire_str = NULL;
@@ -451,6 +454,8 @@ static const char *get_array_string (json_t *array, size_t index)
 
 static int expand_ids (const char *resources, std::vector<uint64_t> &id_vec)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     int rc = -1;
     struct idset *ids = NULL;
     try {
@@ -484,6 +489,8 @@ static int unpack_resources (json_t *resobj,
                              json_t **jgf_p,
                              graph_duration_t &duration)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     int rc = 0;
     struct idset *ids;
     int version;
@@ -593,6 +600,8 @@ error:
 static int unpack_resobj (json_t *resobj,
                           std::map<const distinct_range_t, std::shared_ptr<resobj_t>> &out)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     if (!resobj)
         goto inval;
     try {
@@ -1181,6 +1190,8 @@ done:
 // Returns 0 on success, -1 on failure.
 static int subtract_ids (const char *a, const char *b, char **resultp)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     int rc = -1;
     char *result = NULL;
     struct idset *idset = idset_decode (a);
@@ -1421,6 +1432,8 @@ out:
 
 int Rlite_equal (const std::shared_ptr<resource_ctx_t> &ctx, const char *R1, const char *R2)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     int rc = -1;
     int saved_errno;
     json_t *o1 = NULL;
