@@ -22,6 +22,7 @@ extern "C" {
 #include "resource/readers/resource_reader_grug.hpp"
 #include "resource/store/resource_graph_store.hpp"
 #include "resource/planner/c/planner.h"
+#include "src/common/dftracer_annotation.hpp"
 
 using namespace Flux::resource_model;
 
@@ -67,6 +68,8 @@ class dfs_emitter_t : public boost::default_dfs_visitor {
 
 int dfs_emitter_t::path_prefix (const std::string &path, int uplevel, std::string &prefix)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     size_t pos = 0;
     unsigned int occurrence = 0;
     auto num_slashes = count (path.begin (), path.end (), '/');
@@ -120,6 +123,8 @@ int dfs_emitter_t::gen_id (gge_t e, const gg_t &recipe, int i, int sz, int j)
 
 int dfs_emitter_t::raw_edge (vtx_t src_v, vtx_t tgt_v, edg_t &e)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     bool inserted;
     out_edg_iterator_t ei, ee;
     resource_graph_t &g = *m_g_p;
@@ -184,6 +189,8 @@ vtx_t dfs_emitter_t::emit_vertex (ggv_t u,
                                   int sz,
                                   int j)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     resource_graph_t &g = *m_g_p;
     resource_graph_metadata_t &m = *m_gm_p;
     if (src_v == boost::graph_traits<resource_graph_t>::null_vertex ())
@@ -287,6 +294,8 @@ dfs_emitter_t &dfs_emitter_t::operator= (const dfs_emitter_t &o)
  */
 void dfs_emitter_t::tree_edge (gge_t e, const gg_t &recipe)
 {
+    FLUX_DFT_FN (GRAPH);
+    FLUX_DFT_UPDATE (GRAPH, "comp", "cpu");
     vtx_t src_vtx, tgt_vtx;
     ggv_t src_ggv = source (e, recipe);
     ggv_t tgt_ggv = target (e, recipe);

@@ -18,6 +18,7 @@ extern "C" {
 #include <filesystem>
 #include <getopt.h>
 #include "resource/readers/resource_spec_grug.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 using namespace Flux::resource_model;
 
@@ -47,6 +48,9 @@ void usage (int code)
 
 int main (int argc, char *argv[])
 {
+    FLUX_DFT_PROCESS_INIT ();
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "cpu");
     int ch;
     int rc = 0;
     bool simple = true;

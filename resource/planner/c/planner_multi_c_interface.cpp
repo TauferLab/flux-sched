@@ -18,6 +18,7 @@
 
 #include "planner_multi.h"
 #include "resource/planner/c++/planner_multi.hpp"
+#include "src/common/dftracer_annotation.hpp"
 
 ////////////////////////////////////////////////////////////////////////////////
 // Planner Multi and Resource Update APIs
@@ -30,6 +31,8 @@ static void fill_iter_request (planner_multi_t *ctx,
                                const uint64_t *resources,
                                size_t len)
 {
+    FLUX_DFT_FN (PLANNER);
+    FLUX_DFT_UPDATE (PLANNER, "comp", "cpu");
     size_t i;
     iter->on_or_after = at;
     iter->duration = duration;

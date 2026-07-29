@@ -18,6 +18,7 @@ extern "C" {
 #include <sys/time.h>
 #include "command.hpp"
 #include <readers/resource_reader_factory.hpp>
+#include "src/common/dftracer_annotation.hpp"
 
 namespace Flux {
 namespace resource_model {
@@ -997,6 +998,8 @@ int cmd_quit (std::shared_ptr<detail::resource_query_t> &ctx,
 
 cmd_func_f *find_cmd (const std::string &cmd_str)
 {
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "cpu");
     for (int i = 0; commands[i].name != "NA"; ++i) {
         if (cmd_str == commands[i].name)
             return commands[i].cmd;

@@ -9,6 +9,8 @@
 \*****************************************************************************/
 
 #include "resource_match.hpp"
+#include "src/common/dftracer_annotation.hpp"
+#include "src/common/dftracer_bootstrap.hpp"
 
 MOD_NAME ("sched-fluxion-resource");
 
@@ -244,6 +246,8 @@ static int process_config_file (std::shared_ptr<resource_ctx_t> &ctx)
 
 static std::shared_ptr<resource_ctx_t> init_module (flux_t *h, int argc, char **argv)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     std::shared_ptr<resource_ctx_t> ctx = nullptr;
     uint32_t rank = 1;
 
@@ -285,6 +289,8 @@ error:
 
 static void update_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     char *R = NULL;
     int64_t at = 0;
     double overhead = 0.0f;
@@ -362,6 +368,8 @@ error:
 
 static void match_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     int64_t at = 0;
     int64_t now = 0;
     int64_t jobid = -1;
@@ -431,6 +439,8 @@ static void match_multi_request_cb (flux_t *h,
                                     const flux_msg_t *msg,
                                     void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     size_t index;
     json_t *value;
     int saved_errno;
@@ -522,6 +532,8 @@ error:
 
 static void cancel_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
     int64_t jobid = -1;
     char *R = NULL;
@@ -561,6 +573,8 @@ static void partial_cancel_request_cb (flux_t *h,
                                        const flux_msg_t *msg,
                                        void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
     int64_t jobid = -1;
     char *R = NULL;
@@ -605,6 +619,8 @@ error:
 
 static void info_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
     int64_t jobid = -1;
     std::shared_ptr<job_info_t> info = NULL;
@@ -687,6 +703,8 @@ done:
 
 static void stat_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
     int saved_errno;
     json::value o;
@@ -851,6 +869,8 @@ static void next_jobid_request_cb (flux_t *h,
                                    const flux_msg_t *msg,
                                    void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
     int64_t jobid = -1;
 
@@ -873,6 +893,8 @@ static void set_property_request_cb (flux_t *h,
                                      const flux_msg_t *msg,
                                      void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     const char *kv = NULL;
     json_t *paths_json = NULL;
     std::string keyval = "", errmsg = "";
@@ -974,6 +996,8 @@ static void remove_property_request_cb (flux_t *h,
                                         const flux_msg_t *msg,
                                         void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     const char *kv = NULL;
     json_t *paths_json = NULL;
     std::string property_key = "", errmsg = "";
@@ -1048,6 +1072,8 @@ static void get_property_request_cb (flux_t *h,
                                      const flux_msg_t *msg,
                                      void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     const char *rp = NULL, *gp_key = NULL;
     std::string resource_path = "", property_key = "", errmsg = "";
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
@@ -1120,6 +1146,8 @@ static void add_subgraph_request_cb (flux_t *h,
                                      const flux_msg_t *msg,
                                      void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
     std::string errmsg = "";
     char *R_subgraph = NULL;
@@ -1147,6 +1175,8 @@ static void remove_subgraph_request_cb (flux_t *h,
                                         const flux_msg_t *msg,
                                         void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
     std::string errmsg = "";
     char *subgraph_path = NULL;
@@ -1189,6 +1219,8 @@ static void disconnect_request_cb (flux_t *h,
 
 static void notify_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     try {
         const char *route;
         std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
@@ -1311,6 +1343,8 @@ error:
 
 static void find_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     json_t *R = nullptr;
     int saved_errno;
     const char *criteria = nullptr;
@@ -1347,6 +1381,8 @@ error:
 
 static void status_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     int saved_errno;
     json_t *R_all = nullptr;
     json_t *R_down = nullptr;
@@ -1411,6 +1447,8 @@ error:
 
 static void ns_info_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     uint64_t rank, id, remapped_id;
     const char *type_name;
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
@@ -1450,6 +1488,8 @@ error:
 
 static void params_request_cb (flux_t *h, flux_msg_handler_t *w, const flux_msg_t *msg, void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     int saved_errno;
     json_error_t jerr;
     std::string params;
@@ -1505,6 +1545,8 @@ static void set_status_request_cb (flux_t *h,
                                    const flux_msg_t *msg,
                                    void *arg)
 {
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
     const char *rp = NULL, *st = NULL;
     std::string resource_path = "", status = "", errmsg = "";
     std::shared_ptr<resource_ctx_t> ctx = getctx ((flux_t *)arg);
@@ -1641,6 +1683,12 @@ static int init_resource_graph (std::shared_ptr<resource_ctx_t> &ctx)
 extern "C" int mod_main (flux_t *h, int argc, char **argv)
 {
     int rc = -1;
+
+    // Nothing else in the broker initializes or finalizes dftracer, and without
+    // a finalize the trace file the annotations write to stays empty. See
+    // dftracer_bootstrap.hpp for why this lives here and only here, and why it
+    // is gated on the module load generation rather than the process.
+    Flux::dftracer_bootstrap::begin_session ();
 
     flux_log (h, LOG_INFO, "version %s", PACKAGE_VERSION);
 

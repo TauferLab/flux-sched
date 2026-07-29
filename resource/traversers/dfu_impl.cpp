@@ -20,6 +20,7 @@ extern "C" {
 #include <chrono>
 
 #include <flux/core/job.h>
+#include "src/common/dftracer_annotation.hpp"
 
 using namespace Flux::Jobspec;
 using namespace Flux::resource_model;
@@ -1068,6 +1069,8 @@ int dfu_impl_t::resolve (scoring_api_t &dfu, scoring_api_t &to_parent)
 
 std::optional<edg_t> find_parent_edge (vtx_t v, resource_graph_t &g, subsystem_t s)
 {
+    FLUX_DFT_FN (TRAVERSE);
+    FLUX_DFT_UPDATE (TRAVERSE, "comp", "cpu");
     for (auto [ei, e_end] = in_edges (v, g); ei != e_end; ++ei) {
         if (g[*ei].subsystem == s)
             return *ei;
