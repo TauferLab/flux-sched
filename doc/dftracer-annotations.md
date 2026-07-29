@@ -26,24 +26,41 @@ build at it with `DFTRACER_ROOT` (the prefix containing `include/` and `lib/`):
 Configuring with a level above 0 and no dftracer available is a hard error rather
 than a silent downgrade.
 
-## Choosing a level
+## Choosing a level, and turning off I/O interception
 
-Level is a cost control. Measured on the flux-fiction rabbit300 emulation
-(300 jobs, 1153 nodes, 2026-07-29):
+Measured on the flux-fiction rabbit300 emulation (300 jobs, 1153 nodes), all runs
+on the same node from this tree with `CMAKE_BUILD_TYPE=Release`, level 0 as the
+control:
 
-| level | events | notes |
-|---|---|---|
-| 1 | ~10 | module lifecycle only |
-| 2 | ~1.2k | one event per job through the match path — usually what you want |
-| 5 | 2.6M | 74% of it is the interner's `get_both` alone; run takes ~3.6x untraced |
+| build | wall | vs level 0 | Fluxion events |
+|---|---|---|---|
+| level 0 | 62 s | 1.00x | — |
+| level 2, `DFTRACER_DISABLE_IO=1` | 64 s | **1.03x** | 1,536 |
+| level 2 | 128 s | 2.06x | 1,536 |
+| level 5, `DFTRACER_DISABLE_IO=1` | 155 s | 2.50x | 2,570,816 |
+| level 5 | 351 s | 5.66x | 2,605,883 |
 
-The level-5 multiplier is much worse under emulation than it would be in a normal
-run. flux-fiction drives the broker under `libfaketime` with
-`FAKETIME_NO_CACHE=1`, so every clock read a `DFTracer` constructor and destructor
-performs becomes an `open`/`read`/`close` of the stamp file on `/dev/shm` (~20 µs)
-instead of a vDSO call (~0.02 µs). Per-string and per-vertex annotations are
-therefore roughly a thousand times more expensive there than they look. Levels 1–4
-leave those paths alone.
+Two things fall out of that.
+
+**Set `DFTRACER_DISABLE_IO=1` unless you actually want I/O events.** Initializing
+dftracer at all installs its gotcha POSIX/stdio interception, and that — not the
+annotations — is most of the cost: it accounts for 64 of level 2's 66 seconds of
+overhead, and 196 of level 5's 289. Disabling it changes the annotation event
+count by ~1% (the difference is dftracer's own `POSIX/*` events), so with it set,
+level 2 is effectively free.
+
+**Level 5 is expensive even with I/O interception off**, because it is 2.6M
+events, 74% of them from the string interner's `get_both`. That multiplier is
+worse under emulation than it would be in a normal run: flux-fiction drives the
+broker under `libfaketime` with `FAKETIME_NO_CACHE=1`, so every clock read a
+`DFTracer` constructor and destructor performs becomes an `open`/`read`/`close`
+of the stamp file on `/dev/shm` (~20 µs) instead of a vDSO call (~0.02 µs).
+Per-string and per-vertex annotations are therefore roughly a thousand times more
+expensive there than they look. Levels 1-4 leave those paths alone.
+
+Level 2 is the sensible default for scheduler work: one event per job through
+`match_multi_request_cb`, `feasibility_request_cb` and `cancel_request_cb`, at
+no measurable cost.
 
 ## Adding an annotation
 
