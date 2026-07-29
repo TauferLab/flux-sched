@@ -32,15 +32,18 @@
  *     level 0                          62 s   1.00x         - events
  *     level 2, DFTRACER_DISABLE_IO=1   64 s   1.03x     1,536 events
  *     level 2                         128 s   2.06x     1,536 events
- *     level 5, DFTRACER_DISABLE_IO=1  155 s   2.50x  2,570,816 events
- *     level 5                         351 s   5.66x  2,605,883 events
+ *     level 5, DFTRACER_DISABLE_IO=1  155 s   2.50x  2,570,814 events
+ *     level 5                         351 s   5.66x  2,570,814 events + 8 POSIX
  *
- * Note what that says: most of the cost is not the annotations, it is dftracer's
- * gotcha POSIX/stdio interception, which comes up as soon as the logger is
- * initialized at all. Set DFTRACER_DISABLE_IO=1 unless you want I/O events, and
- * level 2 becomes effectively free.
+ * Note what that says: most of the cost is not the annotations, it is the gotcha
+ * wrappers dftracer installs around POSIX/stdio as soon as the logger comes up.
+ * Those two level 5 rows record exactly the same annotations -- the entire
+ * difference in content is 8 POSIX/execv events, for 196 seconds, because
+ * dftracer only records I/O under DFTRACER_DATA_DIR and every other syscall in
+ * the broker pays for a wrapper that declines to record it. Set
+ * DFTRACER_DISABLE_IO=1 unless you want I/O events; level 2 is then free.
  *
- * Level 5 stays expensive regardless, at 2.6M events with 74% of them from the
+ * Level 5 stays expensive regardless, at 2.57M events with 74% of them from the
  * interner's get_both(). Per-string and per-vertex annotations are far costlier
  * under flux-fiction than they would be in a normal run: it drives the broker
  * under libfaketime with FAKETIME_NO_CACHE=1, so each clock read a DFTracer
