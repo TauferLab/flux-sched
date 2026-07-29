@@ -38,6 +38,54 @@ endif()
 project(flux-sched VERSION ${FLUX_SCHED_VER_NOGIT} LANGUAGES CXX C)
 message(STATUS "Building flux-sched version ${FLUX_SCHED_VER}")
 
+# --- dftracer annotations -----------------------------------------------------
+# How deep to instrument. Levels are cumulative; see
+# src/common/dftracer_annotation.hpp for what each tier covers and what it costs.
+#
+#   0 off (default, no dependency on dftracer)   3 + graph readers/store/policies
+#   1 qmanager entry point                       4 + traversal and utilities
+#   2 + resource module request path             5 + planner and interner
+#
+set(DFTRACER_ANNOTATION_LEVEL 0 CACHE STRING
+    "dftracer annotation depth: 0=off 1=qmanager 2=+match 3=+graph 4=+traverse 5=+planner")
+set_property(CACHE DFTRACER_ANNOTATION_LEVEL PROPERTY STRINGS 0 1 2 3 4 5)
+if(NOT DFTRACER_ANNOTATION_LEVEL MATCHES "^[0-5]$")
+  message(FATAL_ERROR "DFTRACER_ANNOTATION_LEVEL must be 0-5, got '${DFTRACER_ANNOTATION_LEVEL}'")
+endif()
+add_compile_definitions(DFTRACER_ANNOTATION_LEVEL=${DFTRACER_ANNOTATION_LEVEL})
+
+if(DFTRACER_ANNOTATION_LEVEL GREATER 0)
+  # dftracer ships no CMake config file when installed as a wheel, so fall back
+  # to DFTRACER_ROOT (the pydftracer install root, which has include/ and lib/).
+  find_package(dftracer QUIET)
+  if(NOT dftracer_FOUND AND DEFINED ENV{DFTRACER_ROOT})
+    if(EXISTS "$ENV{DFTRACER_ROOT}/include/dftracer/dftracer.h")
+      set(dftracer_INCLUDE_DIRS "$ENV{DFTRACER_ROOT}/include")
+      set(dftracer_LIB_DIR "$ENV{DFTRACER_ROOT}/lib")
+      set(dftracer_FOUND TRUE)
+    endif()
+  endif()
+  if(NOT dftracer_FOUND)
+    message(FATAL_ERROR
+      "DFTRACER_ANNOTATION_LEVEL=${DFTRACER_ANNOTATION_LEVEL} needs dftracer; "
+      "install it or set DFTRACER_ROOT to its prefix (with include/ and lib/)")
+  endif()
+  include_directories(SYSTEM ${dftracer_INCLUDE_DIRS})
+  # Declared as a directory-scope link library rather than through
+  # target_link_options: CMake emits link options BEFORE the object files, and
+  # with gcc's default -Wl,--as-needed the library is dropped from DT_NEEDED
+  # before anything references it, leaving every annotated target undefined on
+  # DFTracer::DFTracer.
+  link_directories(${dftracer_LIB_DIR})
+  add_link_options("-Wl,-rpath,${dftracer_LIB_DIR}")
+  link_libraries(dftracer_core)
+  message(STATUS
+    "dftracer annotations: level ${DFTRACER_ANNOTATION_LEVEL} (lib ${dftracer_LIB_DIR})")
+else()
+  message(STATUS "dftracer annotations: disabled")
+endif()
+# ------------------------------------------------------------------------------
+
 if(POLICY CMP0140)
   cmake_policy(SET CMP0140 NEW)
 endif()
