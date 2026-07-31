@@ -59,6 +59,7 @@ add_library(resource STATIC
     jobinfo/jobinfo.cpp
     schema/resource_data.cpp
     schema/perf_data.cpp
+    schema/stage_times.cpp
     schema/infra_data.cpp
     schema/sched_data.cpp
     schema/color.cpp
