@@ -26,6 +26,7 @@ extern "C" {
 #include "resource/reapi/bindings/c++/reapi_cli.hpp"
 #include "resource/readers/resource_reader_factory.hpp"
 #include "resource/config/system_defaults.hpp"
+#include "resource/schema/stage_times.hpp"
 
 namespace Flux {
 namespace resource_model {
@@ -132,7 +133,10 @@ int reapi_cli_t::match_allocate (void *h,
         return -1;
     }
 
+    stage_times.reset ();
+
     Flux::Jobspec::Jobspec job;
+    stage_timer_t parse_timer;
     try {
         job = Flux::Jobspec::Jobspec{jobspec};
     } catch (Flux::Jobspec::parse_error &e) {
@@ -142,6 +146,7 @@ int reapi_cli_t::match_allocate (void *h,
         errno = EINVAL;
         return -1;
     }
+    stage_times.parse = parse_timer.elapsed ();
 
     /* The traverser returns -1 with errno set on failure.  It does not throw.
      * Continue on (but ultimately return -1) if errno is one of
@@ -165,6 +170,7 @@ int reapi_cli_t::match_allocate (void *h,
         matched = true;
     }
 
+    stage_timer_t emit_timer;
     if (rq->writers->emit (o) < 0) {
         m_err_msg += __FUNCTION__;
         m_err_msg += ": ERROR: match writer emit: " + std::string (strerror (errno)) + "\n";
@@ -172,6 +178,7 @@ int reapi_cli_t::match_allocate (void *h,
     }
 
     R = o.str ();
+    stage_times.emit = emit_timer.elapsed ();
 
     if (gettimeofday (&end_time, NULL) < 0) {
         m_err_msg += __FUNCTION__;
@@ -180,6 +187,7 @@ int reapi_cli_t::match_allocate (void *h,
     }
 
     ov = get_elapsed_time (start_time, end_time);
+    stage_times.total = ov;
 
     if (matched) {
         if (match_op == match_op_t::MATCH_WITHOUT_ALLOCATING

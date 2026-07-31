@@ -18,6 +18,7 @@ extern "C" {
 #include <sys/time.h>
 #include "command.hpp"
 #include <readers/resource_reader_factory.hpp>
+#include "resource/schema/stage_times.hpp"
 
 namespace Flux {
 namespace resource_model {
@@ -150,6 +151,7 @@ static void print_sat_info (std::shared_ptr<detail::resource_query_t> &ctx,
                   << " PREORDER VISIT COUNT=" << pre << std::endl;
         std::cout << "INFO:"
                   << " POSTORDER VISIT COUNT=" << post << std::endl;
+        print_stage_times (std::cout);
     }
 }
 
@@ -189,6 +191,7 @@ static void print_schedule_info (std::shared_ptr<detail::resource_query_t> &ctx,
                       << " PREORDER VISIT COUNT=" << pre << std::endl;
             std::cout << "INFO:"
                       << " POSTORDER VISIT COUNT=" << post << std::endl;
+            print_stage_times (std::cout);
         }
         out << "INFO:"
             << " =============================" << std::endl;
@@ -219,6 +222,7 @@ static void print_schedule_info (std::shared_ptr<detail::resource_query_t> &ctx,
                       << " PREORDER VISIT COUNT=" << pre << std::endl;
             std::cout << "INFO:"
                       << " POSTORDER VISIT COUNT=" << post << std::endl;
+            print_stage_times (std::cout);
         }
         out << "INFO:"
             << " =============================" << std::endl;
