@@ -18,6 +18,7 @@ extern "C" {
 #include <cerrno>
 #include "resource/traversers/dfu.hpp"
 #include "resource/schema/perf_data.hpp"
+#include "resource/schema/stage_times.hpp"
 
 using namespace Flux::resource_model;
 using namespace Flux::resource_model::detail;
@@ -395,10 +396,12 @@ int dfu_traverser_t::run (Jobspec::Jobspec &jobspec,
     const auto exclusive_types = traverser->get_exclusive_resource_types ();
     std::unordered_map<resource_type_t, int64_t> dfv;
 
+    stage_timer_t prime_timer;
     traverser->prime_jobspec (jobspec.resources, dfv);
     if (meta.build (jobspec, detail::jobmeta_t::alloc_type_t::AT_ALLOC, jobid, *at, graph_duration)
         < 0)
         return -1;
+    stage_times.prime = prime_timer.elapsed ();
 
     // If matching without allocation, set alloc_type to prevent allocation in update
     if (op == match_op_t::MATCH_WITHOUT_ALLOCATING
@@ -406,11 +409,24 @@ int dfu_traverser_t::run (Jobspec::Jobspec &jobspec,
         meta.alloc_type = jobmeta_t::alloc_type_t::AT_NO_ALLOC;
 
     if (op == match_op_t::MATCH_SATISFIABILITY) {
+        stage_timer_t match_timer;
         rc = is_satisfiable (jobspec, meta, x, root, dfv);
+        stage_times.match = match_timer.elapsed ();
         if (rc == 0) {
+            stage_timer_t update_timer;
             traverser->update ();
+            stage_times.update = update_timer.elapsed ();
         }
-    } else if ((rc = schedule (jobspec, meta, x, op, root, dfv)) == 0) {
+        return rc + traverser->reset_exclusive_resource_types (exclusive_types);
+    }
+
+    {
+        stage_timer_t match_timer;
+        rc = schedule (jobspec, meta, x, op, root, dfv);
+        stage_times.match = match_timer.elapsed ();
+    }
+
+    if (rc == 0) {
         *at = meta.at;
         if (*at == graph_end) {
             traverser->reset_exclusive_resource_types (exclusive_types);
@@ -431,7 +447,9 @@ int dfu_traverser_t::run (Jobspec::Jobspec &jobspec,
         if ((*at + static_cast<int64_t> (meta.duration)) > graph_end)
             meta.duration = graph_end - *at;
         // returns 0 or -1
+        stage_timer_t update_timer;
         rc = traverser->update (root, writers, meta);
+        stage_times.update = update_timer.elapsed ();
     }
     // returns 0 or -1
     rc += traverser->reset_exclusive_resource_types (exclusive_types);
