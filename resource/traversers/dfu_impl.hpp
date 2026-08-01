@@ -665,6 +665,9 @@ class dfu_impl_t {
     int mod_exv (int64_t jobid, const modify_data_t &mod_data);
     int cancel_vertex (vtx_t vtx, modify_data_t &mod_data, int64_t jobid);
     int clear_vertex (vtx_t vtx, modify_data_t &mod_data);
+    int refresh_outedges (vtx_t u, int64_t now);
+    int refresh_outedges (vtx_t u);
+    int refresh_all_outedges ();
 
     // Subgraph removal functions
     int get_subgraph_vertices (vtx_t vtx, std::set<vtx_t> &vtx_set);
