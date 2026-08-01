@@ -1,0 +1,480 @@
+{
+  "graph": {
+    "directed": false,
+    "nodes": [
+      {
+        "id": "0",
+        "metadata": {
+          "type": "cluster",
+          "name": "mini",
+          "basename": "cluster",
+          "id": 0,
+          "uniq_id": 0,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini"
+          }
+        }
+      },
+      {
+        "id": "1",
+        "metadata": {
+          "type": "chassis",
+          "name": "chassis0",
+          "basename": "chassis",
+          "id": 0,
+          "uniq_id": 10,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis0"
+          }
+        }
+      },
+      {
+        "id": "2",
+        "metadata": {
+          "type": "ssd",
+          "name": "ssd0",
+          "basename": "ssd",
+          "id": 0,
+          "uniq_id": 300,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "GiB",
+          "size": 525,
+          "paths": {
+            "containment": "/mini/chassis0/ssd0"
+          }
+        }
+      },
+      {
+        "id": "3",
+        "metadata": {
+          "type": "ssd",
+          "name": "ssd1",
+          "basename": "ssd",
+          "id": 1,
+          "uniq_id": 301,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "GiB",
+          "size": 525,
+          "paths": {
+            "containment": "/mini/chassis0/ssd1"
+          }
+        }
+      },
+      {
+        "id": "4",
+        "metadata": {
+          "type": "ssd",
+          "name": "ssd2",
+          "basename": "ssd",
+          "id": 2,
+          "uniq_id": 302,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "GiB",
+          "size": 525,
+          "paths": {
+            "containment": "/mini/chassis0/ssd2"
+          }
+        }
+      },
+      {
+        "id": "5",
+        "metadata": {
+          "type": "ssd",
+          "name": "ssd3",
+          "basename": "ssd",
+          "id": 3,
+          "uniq_id": 303,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "GiB",
+          "size": 525,
+          "paths": {
+            "containment": "/mini/chassis0/ssd3"
+          }
+        }
+      },
+      {
+        "id": "6",
+        "metadata": {
+          "type": "chassis",
+          "name": "chassis1",
+          "basename": "chassis",
+          "id": 1,
+          "uniq_id": 11,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1"
+          }
+        }
+      },
+      {
+        "id": "7",
+        "metadata": {
+          "type": "node",
+          "name": "node0",
+          "basename": "node",
+          "id": 0,
+          "uniq_id": 100,
+          "rank": 0,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node0"
+          }
+        }
+      },
+      {
+        "id": "8",
+        "metadata": {
+          "type": "core",
+          "basename": "core",
+          "id": 0,
+          "uniq_id": 200,
+          "rank": 0,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node0/core0"
+          }
+        }
+      },
+      {
+        "id": "9",
+        "metadata": {
+          "type": "core",
+          "basename": "core",
+          "id": 1,
+          "uniq_id": 201,
+          "rank": 0,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node0/core1"
+          }
+        }
+      },
+      {
+        "id": "10",
+        "metadata": {
+          "type": "node",
+          "name": "node1",
+          "basename": "node",
+          "id": 1,
+          "uniq_id": 101,
+          "rank": 1,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node1"
+          }
+        }
+      },
+      {
+        "id": "11",
+        "metadata": {
+          "type": "core",
+          "basename": "core",
+          "id": 0,
+          "uniq_id": 210,
+          "rank": 1,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node1/core0"
+          }
+        }
+      },
+      {
+        "id": "12",
+        "metadata": {
+          "type": "core",
+          "basename": "core",
+          "id": 1,
+          "uniq_id": 211,
+          "rank": 1,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node1/core1"
+          }
+        }
+      },
+      {
+        "id": "13",
+        "metadata": {
+          "type": "node",
+          "name": "node2",
+          "basename": "node",
+          "id": 2,
+          "uniq_id": 102,
+          "rank": 2,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node2"
+          }
+        }
+      },
+      {
+        "id": "14",
+        "metadata": {
+          "type": "core",
+          "basename": "core",
+          "id": 0,
+          "uniq_id": 220,
+          "rank": 2,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node2/core0"
+          }
+        }
+      },
+      {
+        "id": "15",
+        "metadata": {
+          "type": "core",
+          "basename": "core",
+          "id": 1,
+          "uniq_id": 221,
+          "rank": 2,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node2/core1"
+          }
+        }
+      },
+      {
+        "id": "16",
+        "metadata": {
+          "type": "node",
+          "name": "node3",
+          "basename": "node",
+          "id": 3,
+          "uniq_id": 103,
+          "rank": 3,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node3"
+          }
+        }
+      },
+      {
+        "id": "17",
+        "metadata": {
+          "type": "core",
+          "basename": "core",
+          "id": 0,
+          "uniq_id": 230,
+          "rank": 3,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node3/core0"
+          }
+        }
+      },
+      {
+        "id": "18",
+        "metadata": {
+          "type": "core",
+          "basename": "core",
+          "id": 1,
+          "uniq_id": 231,
+          "rank": 3,
+          "exclusive": false,
+          "unit": "",
+          "size": 1,
+          "paths": {
+            "containment": "/mini/chassis1/node3/core1"
+          }
+        }
+      },
+      {
+        "id": "19",
+        "metadata": {
+          "type": "ssd",
+          "name": "ssd0",
+          "basename": "ssd",
+          "id": 0,
+          "uniq_id": 310,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "GiB",
+          "size": 616,
+          "paths": {
+            "containment": "/mini/chassis1/ssd0"
+          }
+        }
+      },
+      {
+        "id": "20",
+        "metadata": {
+          "type": "ssd",
+          "name": "ssd1",
+          "basename": "ssd",
+          "id": 1,
+          "uniq_id": 311,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "GiB",
+          "size": 616,
+          "paths": {
+            "containment": "/mini/chassis1/ssd1"
+          }
+        }
+      },
+      {
+        "id": "21",
+        "metadata": {
+          "type": "ssd",
+          "name": "ssd2",
+          "basename": "ssd",
+          "id": 2,
+          "uniq_id": 312,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "GiB",
+          "size": 616,
+          "paths": {
+            "containment": "/mini/chassis1/ssd2"
+          }
+        }
+      },
+      {
+        "id": "22",
+        "metadata": {
+          "type": "ssd",
+          "name": "ssd3",
+          "basename": "ssd",
+          "id": 3,
+          "uniq_id": 313,
+          "rank": -1,
+          "exclusive": false,
+          "unit": "GiB",
+          "size": 616,
+          "paths": {
+            "containment": "/mini/chassis1/ssd3"
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "0",
+        "target": "1"
+      },
+      {
+        "source": "1",
+        "target": "2"
+      },
+      {
+        "source": "1",
+        "target": "3"
+      },
+      {
+        "source": "1",
+        "target": "4"
+      },
+      {
+        "source": "1",
+        "target": "5"
+      },
+      {
+        "source": "0",
+        "target": "6"
+      },
+      {
+        "source": "6",
+        "target": "7"
+      },
+      {
+        "source": "7",
+        "target": "8"
+      },
+      {
+        "source": "7",
+        "target": "9"
+      },
+      {
+        "source": "6",
+        "target": "10"
+      },
+      {
+        "source": "10",
+        "target": "11"
+      },
+      {
+        "source": "10",
+        "target": "12"
+      },
+      {
+        "source": "6",
+        "target": "13"
+      },
+      {
+        "source": "13",
+        "target": "14"
+      },
+      {
+        "source": "13",
+        "target": "15"
+      },
+      {
+        "source": "6",
+        "target": "16"
+      },
+      {
+        "source": "16",
+        "target": "17"
+      },
+      {
+        "source": "16",
+        "target": "18"
+      },
+      {
+        "source": "6",
+        "target": "19"
+      },
+      {
+        "source": "6",
+        "target": "20"
+      },
+      {
+        "source": "6",
+        "target": "21"
+      },
+      {
+        "source": "6",
+        "target": "22"
+      }
+    ]
+  }
+}

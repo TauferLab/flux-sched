@@ -10,6 +10,8 @@ grugs="${SHARNESS_TEST_SRCDIR}/data/resource/grugs/resv_test.graphml"
 rv1s="${SHARNESS_TEST_SRCDIR}/data/resource/rv1exec/tiny_rv1exec.json"
 jgfs="${SHARNESS_TEST_SRCDIR}/data/resource/jgfs/elastic/tiny-partial-cancel.json"
 jgfs_power="${SHARNESS_TEST_SRCDIR}/data/resource/jgfs/power.json"
+jgfs_dyn="${SHARNESS_TEST_SRCDIR}/data/resource/jgfs/dyn_explore.json"
+dyn_job="${SHARNESS_TEST_SRCDIR}/data/resource/jobspecs/dyn_explore/test001.yaml"
 query="../../resource/utilities/resource-query"
 
 #
@@ -455,6 +457,23 @@ test_expect_success "${test052_desc}" '
     sed "s~@TEST_SRCDIR@~${SHARNESS_TEST_SRCDIR}~g" ${cmds052} > cmds052 &&
     ${query} -f jgf -L ${jgfs_power} -S CA -P low -t 052.R.out < cmds052 &&
     test_cmp 052.R.out ${exp_dir}/052.R.out
+'
+
+test053_desc="cancel restores dynamic first-match edge order (pol=firstnodex)"
+test_expect_success "${test053_desc}" '
+    cat > cmds053 <<-EOF &&
+match allocate ${dyn_job}
+cancel 1
+match allocate ${dyn_job}
+quit
+EOF
+    ${query} -f jgf -L ${jgfs_dyn} -S CA -P firstnodex -e -d < cmds053 > 053.out &&
+    grep -o "PREORDER VISIT COUNT=[0-9]*" 053.out > 053.counts &&
+    cat > 053.expected <<-EOF &&
+PREORDER VISIT COUNT=7
+PREORDER VISIT COUNT=7
+EOF
+    test_cmp 053.expected 053.counts
 '
 
 test_done

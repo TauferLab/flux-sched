@@ -146,6 +146,58 @@ int dfu_impl_t::upd_by_outedges (subsystem_t subsystem, jobmeta_t jobmeta, vtx_t
     return 0;
 }
 
+int dfu_impl_t::refresh_outedges (vtx_t u, int64_t now)
+{
+    (void)now;
+    int rc = 0;
+    f_out_edg_iterator_t ei, ei_end;
+    auto &outedges = m_graph_db->metadata.by_outedges[u];
+
+    if (m_match->get_stop_on_k_matches () <= 0)
+        return 0;
+
+    outedges.clear ();
+    for (tie (ei, ei_end) = out_edges (u, *m_graph); ei != ei_end; ++ei) {
+        vtx_t tgt = target (*ei, *m_graph);
+        (*m_graph)[*ei].idata.set_weight (std::numeric_limits<uint64_t>::max ());
+        auto key = std::make_pair ((*m_graph)[*ei].idata.get_weight (), (*m_graph)[tgt].uniq_id);
+        auto ret = outedges.insert (std::make_pair (key, *ei));
+        if (!ret.second) {
+            errno = ENOMEM;
+            rc = -1;
+        }
+    }
+
+    return rc;
+}
+
+int dfu_impl_t::refresh_outedges (vtx_t u)
+{
+    planner_t *plans = (*m_graph)[u].schedule.plans;
+    int64_t now = 0;
+
+    if (plans != NULL)
+        now = planner_base_time (plans);
+
+    return refresh_outedges (u, now);
+}
+
+int dfu_impl_t::refresh_all_outedges ()
+{
+    int rc = 0;
+    vtx_iterator_t vi, v_end;
+
+    if (m_match->get_stop_on_k_matches () <= 0)
+        return 0;
+
+    for (boost::tie (vi, v_end) = boost::vertices (*m_graph); vi != v_end; ++vi) {
+        if (refresh_outedges (*vi) < 0)
+            rc = -1;
+    }
+
+    return rc;
+}
+
 int dfu_impl_t::upd_plan (vtx_t u,
                           subsystem_t s,
                           unsigned int needs,
@@ -615,6 +667,12 @@ int dfu_impl_t::mod_dfv (vtx_t u, int64_t jobid, modify_data_t &mod_data)
                 rc += mod_upv (tgt, jobid, mod_data);
         }
     }
+    if (refresh_outedges (u) < 0) {
+        m_err_msg += __FUNCTION__;
+        m_err_msg += ": refresh_outedges returned -1.\n";
+        rc = -1;
+        goto done;
+    }
     (*m_graph)[u].idata.colors[dom] = m_color.black ();
     m_postorder++;
 done:
@@ -947,6 +1005,7 @@ int dfu_impl_t::update (vtx_t root,
 
 int dfu_impl_t::remove (vtx_t root, int64_t jobid)
 {
+    int rc = 0;
     m_preorder = 0;
     m_postorder = 0;
 
@@ -955,7 +1014,13 @@ int dfu_impl_t::remove (vtx_t root, int64_t jobid)
     modify_data_t mod_data;
     mod_data.mod_type = job_modify_t::CANCEL;
     m_color.reset ();
-    return (root_has_jtag) ? mod_dfv (root, jobid, mod_data) : mod_exv (jobid, mod_data);
+    rc = (root_has_jtag) ? mod_dfv (root, jobid, mod_data) : mod_exv (jobid, mod_data);
+    if (!root_has_jtag && rc == 0 && refresh_all_outedges () < 0) {
+        m_err_msg += __FUNCTION__;
+        m_err_msg += ": refresh_all_outedges returned -1.\n";
+        rc = -1;
+    }
+    return rc;
 }
 
 int dfu_impl_t::remove (vtx_t root,
@@ -1052,12 +1117,33 @@ int dfu_impl_t::remove (vtx_t root,
                 return rc;
             }
         }
+        for (const auto &rank_root : mod_data.rank_to_root) {
+            if (refresh_outedges (rank_root.second) < 0) {
+                m_err_msg += __FUNCTION__;
+                m_err_msg += ": refresh_outedges failed for rank root.\n";
+                m_err_msg += (*m_graph)[rank_root.second].name + ".\n";
+                return -1;
+            }
+        }
+        for (const auto &v : parent_counts) {
+            if (refresh_outedges (v.first) < 0) {
+                m_err_msg += __FUNCTION__;
+                m_err_msg += ": refresh_outedges failed for ancestor.\n";
+                m_err_msg += (*m_graph)[v.first].name + ".\n";
+                return -1;
+            }
+        }
         // Was the root vertex's job tag removed? If so, full_cancel
         full_cancel =
             ((*m_graph)[root].idata.tags.find (jobid) == (*m_graph)[root].idata.tags.end ());
     } else {
         m_color.reset ();
         rc = mod_exv (jobid, mod_data);
+        if (rc == 0 && refresh_all_outedges () < 0) {
+            m_err_msg += __FUNCTION__;
+            m_err_msg += ": refresh_all_outedges returned -1.\n";
+            return -1;
+        }
     }
 
     return rc;
