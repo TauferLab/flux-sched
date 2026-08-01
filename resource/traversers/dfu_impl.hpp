@@ -587,7 +587,10 @@ class dfu_impl_t {
                    subsystem_t s,
                    jobmeta_t jobmeta,
                    const std::map<resource_type_t, int64_t> &dfu);
-    int upd_by_outedges (subsystem_t subsystem, jobmeta_t jobmeta, vtx_t u, edg_t e);
+    int upd_by_outedges (subsystem_t subsystem, int64_t now, vtx_t u, edg_t e);
+    int refresh_outedges (vtx_t u, int64_t now);
+    int refresh_outedges (vtx_t u);
+    int refresh_all_outedges ();
     int upd_plan (vtx_t u,
                   subsystem_t s,
                   unsigned int needs,

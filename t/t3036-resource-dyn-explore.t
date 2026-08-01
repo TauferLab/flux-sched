@@ -133,4 +133,27 @@ test_expect_success "${test009_desc}" '
     test_cmp 008.R.out ${exp_dir}/008.R.out
 '
 
+#
+# Dynamic first-match policies reorder metadata.by_outedges at allocation
+# time. cancel must refresh that derived order as well as planner state, or
+# the same request can traverse a different path immediately after release.
+#
+
+test010_desc="cancel restores dynamic traversal order (pol=firstnodex)"
+test_expect_success "${test010_desc}" '
+    cat > cmds010 <<-EOF &&
+match allocate ${SHARNESS_TEST_SRCDIR}/data/resource/jobspecs/dyn_explore/test001.yaml
+cancel 1
+match allocate ${SHARNESS_TEST_SRCDIR}/data/resource/jobspecs/dyn_explore/test001.yaml
+quit
+EOF
+    ${query} -L ${jgf} -f jgf -S CA -P firstnodex -e -d < cmds010 > 010.out &&
+    grep -o "PREORDER VISIT COUNT=[0-9]*" 010.out > 010.counts &&
+    cat > 010.expected <<-EOF &&
+PREORDER VISIT COUNT=8
+PREORDER VISIT COUNT=8
+EOF
+    test_cmp 010.expected 010.counts
+'
+
 test_done
