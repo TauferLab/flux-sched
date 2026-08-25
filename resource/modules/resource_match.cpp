@@ -20,6 +20,7 @@ extern "C" {
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <string>
 #include <cerrno>
 #include <map>
 #include <cinttypes>
@@ -1567,6 +1568,29 @@ int run_match (std::shared_ptr<resource_ctx_t> &ctx,
                std::stringstream &o,
                flux_error_t *errp)
 {
+    // Every scheduler allocation/reservation attempt reaches this point once.
+    // Match-multi itself may contain several jobs, so attach the identity here
+    // rather than to its outer batch callback.  Feasibility probes use -1.
+    // DFTracer retains the value pointer until the function span closes, so the
+    // string must outlive the annotation object.  Construct it first: locals
+    // are destroyed in reverse order, leaving it valid through span teardown.
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_MATCH
+    std::string jobid_metadata = std::to_string (jobid);
+#endif
+    // How this match ended, reported as metadata at done:. Set on every exit
+    // path rather than reconstructed from errno down there, because the
+    // flux_log calls in between are entitled to clobber errno. It is always a
+    // string literal, so unlike jobid_metadata it needs no lifetime care.
+    [[maybe_unused]] const char *dft_outcome = "error";
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_MATCH
+    FLUX_DFT_UPDATE (MATCH, "jobid", jobid_metadata.c_str ());
+    // The op as the caller asked for it: "allocate_orelse_reserve" is the one
+    // that can reserve. Without this an allocation attempt and a reservation
+    // attempt are indistinguishable in the trace.
+    FLUX_DFT_UPDATE (MATCH, "cmd", cmd);
+#endif
     int rc = 0;
     std::chrono::time_point<std::chrono::system_clock> start;
     std::chrono::duration<double> elapsed;
@@ -1574,10 +1598,17 @@ int run_match (std::shared_ptr<resource_ctx_t> &ctx,
     bool rsv = false;
 
     start = std::chrono::system_clock::now ();
+    // dfu_traverser_t::run() clears these for every match that reaches the
+    // traverser. Clear them here too, for the paths below that never get that
+    // far -- an unknown cmd or a jobspec that fails to parse -- so they report
+    // zero traversals rather than the previous match's tally.
+    perf.tmp_iter_count = 0;
+    perf.tmp_resv_iter_count = 0;
     match_op_t op = match_op_from_string (cmd);
     if (!match_op_valid (op)) {
         rc = -1;
         errno = EINVAL;
+        dft_outcome = "invalid-cmd";
         flux_log (ctx->h, LOG_ERR, "%s: unknown cmd: %s", __FUNCTION__, cmd);
         goto done;
     }
@@ -1585,23 +1616,31 @@ int run_match (std::shared_ptr<resource_ctx_t> &ctx,
     epoch = std::chrono::duration_cast<std::chrono::seconds> (start.time_since_epoch ());
     *at = *now = epoch.count ();
     if ((rc = run (ctx, jobid, op, jstr, at, errp)) < 0) {
+        // EBUSY: could not be allocated, and could not be reserved either.
+        // ENODEV: unsatisfiable against the graph as a whole.
+        dft_outcome =
+            (errno == EBUSY) ? "busy" : ((errno == ENODEV) ? "unsatisfiable" : "match-error");
         elapsed = std::chrono::system_clock::now () - start;
         *overhead = elapsed.count ();
         update_match_perf (*overhead, jobid, false);
         goto done;
     }
     if ((rc = ctx->writers->emit (o)) < 0) {
+        dft_outcome = "emit-failed";
         flux_log_error (ctx->h, "%s: writer can't emit", __FUNCTION__);
         goto done;
     }
 
     rsv = (*now != *at) ? true : false;
+    dft_outcome = (op == match_op_t::MATCH_SATISFIABILITY) ? "satisfiable"
+                                                           : (rsv ? "reserved" : "allocated");
     elapsed = std::chrono::system_clock::now () - start;
     *overhead = elapsed.count ();
     update_match_perf (*overhead, jobid, true);
 
     if (cmd != std::string ("satisfiability")) {
         if ((rc = track_schedule_info (ctx, jobid, rsv, *at, jstr, o, *overhead)) != 0) {
+            dft_outcome = "track-failed";
             flux_log_error (ctx->h,
                             "%s: can't add job info (id=%jd)",
                             __FUNCTION__,
@@ -1611,6 +1650,18 @@ int run_match (std::shared_ptr<resource_ctx_t> &ctx,
     }
 
 done:
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_MATCH
+    // The reservation search lives entirely inside the run() above: a single
+    // match walks the planner's scheduleable points and re-runs the traversal
+    // at each one until a placement fits. That work never shows up in the
+    // match count -- conservative and easy backfill both issue exactly one
+    // match per pending job per scheduling pass -- so carry the traverser's
+    // own tally out here, where a level 2 build can see it without paying for
+    // level 4. dfu_traverser_t::run() resets both before every match.
+    FLUX_DFT_UPDATE (MATCH, "resv_attempts", static_cast<int> (perf.tmp_resv_iter_count));
+    FLUX_DFT_UPDATE (MATCH, "sched_iters", static_cast<int> (perf.tmp_iter_count));
+    FLUX_DFT_UPDATE (MATCH, "outcome", dft_outcome);
+#endif
     return rc;
 }
 

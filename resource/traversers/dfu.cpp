@@ -56,6 +56,9 @@ int dfu_traverser_t::is_satisfiable (Jobspec::Jobspec &jobspec,
     }
     m_total_preorder = traverser->get_preorder_count ();
     m_total_postorder = traverser->get_postorder_count ();
+    // One traversal, at the far end of the planner's horizon, and it is a
+    // satisfiability probe rather than a reservation attempt.
+    perf.tmp_iter_count = 1;
 
     return rc;
 }
@@ -143,6 +146,11 @@ int dfu_traverser_t::schedule (Jobspec::Jobspec &jobspec,
 {
     int64_t t = 0;
     int64_t sched_iters = 0;  // Track the schedule iterations in perf stats
+    // Of those iterations, the ones spent attempting a reservation at a
+    // candidate future start time. Counted unconditionally -- it is two
+    // increments per traversal, and the dftracer annotations in the resource
+    // module report it at level 2 without needing the traversal instrumented.
+    int64_t resv_iters = 0;
     int rc = -1;
     size_t len = 0;
     std::vector<uint64_t> agg;
@@ -202,6 +210,11 @@ int dfu_traverser_t::schedule (Jobspec::Jobspec &jobspec,
                 m_total_postorder += traverser->get_postorder_count ();
                 // increment match traversal loop count
                 ++sched_iters;
+                // ... and the reservation-attempt subtotal: this iteration is
+                // a placement attempt at one scheduleable point offered by the
+                // planner. The loop runs until a point fits, so this is how
+                // hard the reservation for this job actually was to compute.
+                ++resv_iters;
             }
             // The planner layer returns
             //     ENOENT when no scheduleable point exists
@@ -239,6 +252,7 @@ out:
     // corresponds to the max match time this value will be output in the
     // stats RPC.
     perf.tmp_iter_count = sched_iters;
+    perf.tmp_resv_iter_count = resv_iters;
     return rc;
 }
 
@@ -361,6 +375,13 @@ int dfu_traverser_t::run (Jobspec::Jobspec &jobspec,
 {
     // Clear the error message to disambiguate errors
     clear_err_message ();
+
+    // Reset the per-match iteration counters up front. Only schedule() writes
+    // them, so the satisfiability path and the early-error returns below would
+    // otherwise leave the previous match's counts in place for this one's
+    // reader to pick up.
+    perf.tmp_iter_count = 0;
+    perf.tmp_resv_iter_count = 0;
 
     subsystem_t dom = get_match_cb ()->dom_subsystem ();
     graph_duration_t graph_duration = get_graph_db ()->metadata.graph_duration;

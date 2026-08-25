@@ -59,7 +59,19 @@ struct match_perf_t {
         std::chrono::system_clock::now ();
     perf_stats succeeded;
     perf_stats failed;
+    /* Traversals performed by the most recent match: every dfu_impl select()
+     * dfu_traverser_t::schedule() issued, including the initial allocation
+     * attempt and any far-future satisfiability probe.
+     */
     int64_t tmp_iter_count = -1;
+    /* Of those, the ones that were reservation attempts at a candidate future
+     * start time -- one per scheduleable point the planner offered under
+     * MATCH_ALLOCATE_ORELSE_RESERVE. Zero for a job that allocated outright,
+     * for a plain allocate, and for a satisfiability check. This is the cost
+     * that separates conservative backfill from easy, and it is invisible in
+     * the match count because the whole search happens inside one match.
+     */
+    int64_t tmp_resv_iter_count = -1;
 };
 
 extern struct match_perf_t perf;
