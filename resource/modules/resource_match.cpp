@@ -20,6 +20,7 @@ extern "C" {
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <string>
 #include <cerrno>
 #include <map>
 #include <cinttypes>
@@ -1567,6 +1568,20 @@ int run_match (std::shared_ptr<resource_ctx_t> &ctx,
                std::stringstream &o,
                flux_error_t *errp)
 {
+    // Every scheduler allocation/reservation attempt reaches this point once.
+    // Match-multi itself may contain several jobs, so attach the identity here
+    // rather than to its outer batch callback.  Feasibility probes use -1.
+    // DFTracer retains the value pointer until the function span closes, so the
+    // string must outlive the annotation object.  Construct it first: locals
+    // are destroyed in reverse order, leaving it valid through span teardown.
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_MATCH
+    std::string jobid_metadata = std::to_string (jobid);
+#endif
+    FLUX_DFT_FN (MATCH);
+    FLUX_DFT_UPDATE (MATCH, "comp", "cpu");
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_MATCH
+    FLUX_DFT_UPDATE (MATCH, "jobid", jobid_metadata.c_str ());
+#endif
     int rc = 0;
     std::chrono::time_point<std::chrono::system_clock> start;
     std::chrono::duration<double> elapsed;

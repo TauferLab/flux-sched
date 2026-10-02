@@ -12,8 +12,10 @@
 #define QUEUE_POLICY_BF_BASE_IMPL_HPP
 
 #include "qmanager/policies/queue_policy_bf_base.hpp"
+#include "src/common/dftracer_annotation.hpp"
 #include <jansson.h>
 #include <memory>
+#include <string>
 
 namespace Flux {
 namespace queue_manager {
@@ -26,6 +28,15 @@ namespace detail {
 template<class reapi_type>
 int queue_policy_bf_base_t<reapi_type>::cancel_reserved_jobs (void *h)
 {
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_QMANAGER
+    std::string reserved_count = std::to_string (m_reserved.size ());
+#endif
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
+    FLUX_DFT_UPDATE (QMANAGER, "reservation_path", "true");
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_QMANAGER
+    FLUX_DFT_UPDATE (QMANAGER, "reserved_count", reserved_count.c_str ());
+#endif
     int rc = 0;
     std::map<uint64_t, flux_jobid_t>::const_iterator citer;
     for (citer = m_reserved.begin (); citer != m_reserved.end (); citer++)
@@ -52,6 +63,18 @@ int queue_policy_bf_base_t<reapi_type>::next_match_iter ()
 
     auto &job = m_jobs[m_in_progress_iter->second];
     m_try_reserve = m_reservation_cnt < m_reservation_depth;
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_QMANAGER
+    std::string jobid_metadata = std::to_string (job->id);
+    std::string reservation_count = std::to_string (m_reservation_cnt);
+#endif
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
+    FLUX_DFT_UPDATE (QMANAGER, "reservation_path", "true");
+    FLUX_DFT_UPDATE (QMANAGER, "try_reserve", m_try_reserve ? "true" : "false");
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_QMANAGER
+    FLUX_DFT_UPDATE (QMANAGER, "jobid", jobid_metadata.c_str ());
+    FLUX_DFT_UPDATE (QMANAGER, "reservation_count", reservation_count.c_str ());
+#endif
     json_t *jobspec_obj;
     json_error_t err;
     if (!(jobspec_obj = json_loads (job->jobspec.c_str (), 0, &err))) {
@@ -71,6 +94,12 @@ int queue_policy_bf_base_t<reapi_type>::next_match_iter ()
 template<class reapi_type>
 int queue_policy_bf_base_t<reapi_type>::allocate_orelse_reserve_jobs (void *h)
 {
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
+    FLUX_DFT_UPDATE (QMANAGER, "reservation_path", "true");
+    FLUX_DFT_UPDATE (QMANAGER,
+                     "sched_loop_active",
+                     this->is_sched_loop_active () ? "true" : "false");
     // Iterate jobs in the pending job queue and try to allocate each
     // until you can't. When you can't allocate a job, you reserve it
     // and then try to backfill later jobs.
@@ -134,6 +163,17 @@ int queue_policy_bf_base_t<reapi_type>::handle_match_success (flux_jobid_t jobid
                                                               int64_t at,
                                                               double ov)
 {
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_QMANAGER
+    std::string jobid_metadata = std::to_string (jobid);
+    std::string status_metadata = status ? status : "";
+#endif
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
+    FLUX_DFT_UPDATE (QMANAGER, "reservation_path", "true");
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_QMANAGER
+    FLUX_DFT_UPDATE (QMANAGER, "jobid", jobid_metadata.c_str ());
+    FLUX_DFT_UPDATE (QMANAGER, "match_status", status_metadata.c_str ());
+#endif
     if (!is_sched_loop_active ()) {
         errno = EINVAL;
         return -1;
@@ -155,6 +195,7 @@ int queue_policy_bf_base_t<reapi_type>::handle_match_success (flux_jobid_t jobid
     sched.old_at = sched.at;
     sched.at = at;
     sched.ov = ov;
+    FLUX_DFT_UPDATE (QMANAGER, "reserved", sched.reserved ? "true" : "false");
     if (job->schedule.reserved) {
         // High-priority job has been reserved, continue
         m_reserved.insert (std::pair<uint64_t, flux_jobid_t> (m_oq_cnt++, job->id));
@@ -177,6 +218,18 @@ int queue_policy_bf_base_t<reapi_type>::handle_match_success (flux_jobid_t jobid
 template<class reapi_type>
 int queue_policy_bf_base_t<reapi_type>::handle_match_failure (flux_jobid_t jobid, int errcode)
 {
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_QMANAGER
+    std::string jobid_metadata = std::to_string (jobid);
+    std::string errcode_metadata = std::to_string (errcode);
+#endif
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
+    FLUX_DFT_UPDATE (QMANAGER, "reservation_path", "true");
+    FLUX_DFT_UPDATE (QMANAGER, "try_reserve", m_try_reserve ? "true" : "false");
+#if DFTRACER_ANNOTATION_LEVEL >= FLUX_DFT_LEVEL_QMANAGER
+    FLUX_DFT_UPDATE (QMANAGER, "jobid", jobid_metadata.c_str ());
+    FLUX_DFT_UPDATE (QMANAGER, "errcode", errcode_metadata.c_str ());
+#endif
     if (!is_sched_loop_active ()) {
         errno = EINVAL;
         return -1;
@@ -221,6 +274,13 @@ int queue_policy_bf_base_t<reapi_type>::handle_match_failure (flux_jobid_t jobid
 template<class reapi_type>
 int queue_policy_bf_base_t<reapi_type>::run_sched_loop (void *h, bool use_alloced_queue)
 {
+    FLUX_DFT_FN (QMANAGER);
+    FLUX_DFT_UPDATE (QMANAGER, "comp", "cpu");
+    FLUX_DFT_UPDATE (QMANAGER, "reservation_path", "true");
+    FLUX_DFT_UPDATE (QMANAGER, "use_alloced_queue", use_alloced_queue ? "true" : "false");
+    FLUX_DFT_UPDATE (QMANAGER,
+                     "sched_loop_active",
+                     is_sched_loop_active () ? "true" : "false");
     int rc = 0;
     if (!is_sched_loop_active ()) {
         set_schedulability (false);
